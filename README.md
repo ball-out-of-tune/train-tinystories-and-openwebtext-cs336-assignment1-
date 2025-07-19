@@ -48,3 +48,19 @@ gunzip owt_valid.txt.gz
 cd ..
 ```
 
+## Test Results
+### Problem (`train_bpe`): BPE Tokenizer Training
+```
+cs336-basicsziyitang@MacBookAir assignment1-basics % uv run pytest tests/test_train_bpe.py  
+=============================================== test session starts ================================================
+platform darwin -- Python 3.13.5, pytest-8.3.5, pluggy-1.5.0
+rootdir: /Users/ziyitang/stanford-cs336/assignment1-basics
+configfile: pyproject.toml
+plugins: jaxtyping-0.3.1
+collected 3 items                                                                                                  
+
+tests/test_train_bpe.py ...
+
+================================================ 3 passed in 2.42s =================================================
+```
+
