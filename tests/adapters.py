@@ -5,7 +5,7 @@ from typing import IO, Any, BinaryIO
 from collections.abc import Iterable
 from jaxtyping import Float, Int
 from cs336_basics.tokenizer import BPETokenizerTrainer, BPETokenizer
-from cs336_basics.modules import Linear
+from cs336_basics.modules import Embedding, Linear
 
 import numpy.typing as npt
 import torch
@@ -54,8 +54,9 @@ def run_embedding(
     Returns:
         Float[Tensor, "... d_model"]: Batch of embeddings returned by your Embedding layer.
     """
-
-    raise NotImplementedError
+    embedding = Embedding(num_embeddings=vocab_size, embedding_dim=d_model)
+    embedding.load_state_dict({"emb": weights})
+    return embedding.forward(token_ids)
 
 
 def run_swiglu(
