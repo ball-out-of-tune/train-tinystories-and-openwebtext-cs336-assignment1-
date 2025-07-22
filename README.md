@@ -65,7 +65,7 @@ tests/test_train_bpe.py::test_train_bpe_special_tokens PASSED
 
 ===================================================== 3 passed in 2.10s ======================================================
 ```
-### Problem (tokenizer): Implementing the tokenizer (15 points)
+### Problem (`tokenizer`: Implementing the tokenizer (15 points)
 ```
 cs336-basicsziyitang@Ziyis-MacBook-Air assignment1-basics % uv run pytest tests/test_tokenizer.py              
 ==================================================== test session starts =====================================================

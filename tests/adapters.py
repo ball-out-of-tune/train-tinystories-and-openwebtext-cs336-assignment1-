@@ -4,7 +4,8 @@ import os
 from typing import IO, Any, BinaryIO
 from collections.abc import Iterable
 from jaxtyping import Float, Int
-from cs336_basics.bpe_tokenizer import BPETokenizerTrainer, BPETokenizer
+from cs336_basics.tokenizer import BPETokenizerTrainer, BPETokenizer
+from cs336_basics.modules import Linear
 
 import numpy.typing as npt
 import torch
@@ -30,8 +31,9 @@ def run_linear(
     Returns:
         Float[Tensor, "... d_out"]: The transformed output of your linear module.
     """
-
-    raise NotImplementedError
+    linear = Linear(in_features=d_in, out_features=d_out)
+    linear.load_state_dict({"W": weights})
+    return linear.forward(in_features)
 
 
 def run_embedding(
