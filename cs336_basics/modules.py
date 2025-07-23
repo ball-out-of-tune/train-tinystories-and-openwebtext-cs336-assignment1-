@@ -77,7 +77,7 @@ class RMSNorm(torch.nn.Module):
         self.dtype = dtype
         
         # Learnable scaling factor for all tokens
-        self.gain = torch.nn.Parameter(torch.ones(self.d_model)) # (d_model,)
+        self.gain = torch.nn.Parameter(torch.ones(self.d_model))  # (d_model,)
     
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -92,3 +92,31 @@ class RMSNorm(torch.nn.Module):
         rms_norm = x / rms * self.gain
         return rms_norm.to(in_dtype)
     
+
+class SwiGLUFFN(torch.nn.Module):
+    def __init__(self, d_model: int, d_ff: int):
+        super().__init__()
+        self.d_model = d_model
+        self.d_ff = d_ff
+        self.w1 = torch.nn.Parameter(torch.empty(d_ff, d_model))
+        self.w2 = torch.nn.Parameter(torch.empty(d_model, d_ff))
+        self.w3 = torch.nn.Parameter(torch.empty(d_ff, d_model))
+        
+        self.reset_parameters()
+    
+    def forward(self, in_features: torch.Tensor):
+        """
+        Args:
+            in_features (torch.Tensor): (..., d_model)
+        Returns:
+            torch.Tensor: (..., d_model)
+        """
+        g = in_features @ self.w1.T  # gate: (..., d_ff)
+        silu = g * torch.sigmoid(g)  # silu: (..., d_ff)
+        x = in_features @ self.w3.T  # activation: (..., d_ff)
+        return (silu * x) @ self.w2.T  # (..., d_model)
+    
+    def reset_parameters(self):
+        torch.nn.init.trunc_normal_(self.w1, mean=0, std=2 / (self.d_ff + self.d_model))
+        torch.nn.init.trunc_normal_(self.w2, mean=0, std=2 / (self.d_model + self.d_ff))
+        torch.nn.init.trunc_normal_(self.w3, mean=0, std=2 / (self.d_ff + self.d_model))

@@ -5,7 +5,7 @@ from typing import IO, Any, BinaryIO
 from collections.abc import Iterable
 from jaxtyping import Float, Int
 from cs336_basics.tokenizer import BPETokenizerTrainer, BPETokenizer
-from cs336_basics.modules import Embedding, Linear, RMSNorm
+from cs336_basics.modules import Embedding, Linear, RMSNorm, SwiGLUFFN
 
 import numpy.typing as npt
 import torch
@@ -88,7 +88,9 @@ def run_swiglu(
     # swiglu.w1.weight.data = w1_weight
     # swiglu.w2.weight.data = w2_weight
     # swiglu.w3.weight.data = w3_weight
-    raise NotImplementedError
+    swiglu = SwiGLUFFN(d_model=d_model, d_ff=d_ff)
+    swiglu.load_state_dict({"w1": w1_weight, "w2": w2_weight, "w3": w3_weight})
+    return swiglu.forward(in_features)
 
 
 def run_scaled_dot_product_attention(
