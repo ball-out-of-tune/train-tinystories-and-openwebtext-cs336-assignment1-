@@ -5,7 +5,7 @@ from typing import IO, Any, BinaryIO
 from collections.abc import Iterable
 from jaxtyping import Float, Int
 from cs336_basics.tokenizer import BPETokenizerTrainer, BPETokenizer
-from cs336_basics.modules import Embedding, Linear, RMSNorm, SwiGLUFFN
+from cs336_basics.modules import Embedding, Linear, RMSNorm, SwiGLUFFN, silu
 
 import numpy.typing as npt
 import torch
@@ -401,7 +401,7 @@ def run_silu(in_features: Float[Tensor, " ..."]) -> Float[Tensor, " ..."]:
         Float[Tensor,"..."]: of with the same shape as `in_features` with the output of applying
         SiLU to each element.
     """
-    raise NotImplementedError
+    return silu(in_features)
 
 
 def run_get_batch(

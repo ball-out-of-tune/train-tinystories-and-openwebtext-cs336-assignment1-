@@ -91,7 +91,18 @@ class RMSNorm(torch.nn.Module):
         rms = torch.sqrt((1 / self.d_model) * torch.sum(x ** 2, dim=-1) + self.eps).unsqueeze(-1)  # (batch_size, sequence_length, 1) 
         rms_norm = x / rms * self.gain
         return rms_norm.to(in_dtype)
-    
+
+
+def silu(in_features: torch.Tensor):
+    """Apply SiLU activation function to an input tensor
+
+    Args:
+        in_features (torch.Tensor): (..., d_model)
+
+    Returns:
+        torch.Tensor: (..., d_model)
+    """
+    return in_features * torch.sigmoid(in_features)
 
 class SwiGLUFFN(torch.nn.Module):
     def __init__(self, d_model: int, d_ff: int):
@@ -111,10 +122,9 @@ class SwiGLUFFN(torch.nn.Module):
         Returns:
             torch.Tensor: (..., d_model)
         """
-        g = in_features @ self.w1.T  # gate: (..., d_ff)
-        silu = g * torch.sigmoid(g)  # silu: (..., d_ff)
+        g = silu(in_features @ self.w1.T)  # gate: (..., d_ff)
         x = in_features @ self.w3.T  # activation: (..., d_ff)
-        return (silu * x) @ self.w2.T  # (..., d_model)
+        return (g * x) @ self.w2.T  # (..., d_model)
     
     def reset_parameters(self):
         torch.nn.init.trunc_normal_(self.w1, mean=0, std=2 / (self.d_ff + self.d_model))
