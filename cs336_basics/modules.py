@@ -1,6 +1,6 @@
 import torch
 import logging
-from einops import rearrange, repeat
+import einops
 
 logger = logging.getLogger(__name__)
 
@@ -179,15 +179,16 @@ class RotaryPositionalEmbedding(torch.nn.Module):
         """
         # NOTE: Iterate each pair of embedding elements and compute rotation
         # using the cos/ sin buffer, so that we don't need to construct the full rotation matrix
+        rotated = torch.empty(x.shape)
         for k in range(self.d_k // 2):
             cos_vals = self.r_cos[token_positions, k]  # (seq_len,)
             sin_vals = self.r_sin[token_positions, k]  # (seq_len,)
             # Apply rotation matrix
-            x[..., 2 * k], x[..., 2 * k + 1] = (
+            rotated[..., 2 * k], rotated[..., 2 * k + 1] = (
                 cos_vals * x[..., 2 * k] - sin_vals * x[..., 2 * k + 1],
                 sin_vals * x[..., 2 * k] + cos_vals * x[..., 2 * k + 1],
             )
-        return x
+        return rotated
 
 
 def softmax(x: torch.Tensor, dim: int):
@@ -197,5 +198,33 @@ def softmax(x: torch.Tensor, dim: int):
     # NOTE: Shift all values to <= 0 to avoid overflow with exp
     x = x - torch.max(x)
     return torch.exp(x) / torch.sum(torch.exp(x), dim=dim, keepdim=True) # Keep the dim to broadcast divide operation
+
+
+def scaled_dot_product_attention(
+    q: torch.Tensor,
+    k: torch.Tensor,
+    v: torch.Tensor,
+    mask: torch.Tensor,
+):
+    """
+    Args:
+        q (torch.Tensor): (batch_size, ..., seq_len_q, d_k)
+        k (torch.Tensor): (batch_size, ..., seq_len_k, d_k)
+        v (torch.Tensor): (batch_size, ..., seq_len_k, d_v)
+        mask (torch.Tensor): (seq_len, seq_len)
+            **Note that mask is True if attention is allowed, False otherwise**
+    """
+    print(q.shape, k.shape)
+    prod = (
+        # NOTE: Can also use einops.einsum(q, k, "... q d,... k d->... q k"), but slower for some reason
+        torch.einsum("...qd,...kd->...qk", q, k) 
+        / torch.sqrt(torch.tensor(k.size(-1), dtype=torch.int))
+    )
+    # NOTE: Make masked entry's probability to be 0 after softmax, thus no attention is paid
+    prod[~mask.to(torch.bool)] = -torch.inf
+    sm = softmax(prod, dim=-1) # (seq_len_q, seq_len_k) where each row along seq_len_k is normalized
+    return sm @ v
+    
+    
     
         
