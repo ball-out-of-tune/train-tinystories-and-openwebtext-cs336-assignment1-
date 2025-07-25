@@ -17,7 +17,8 @@ class Linear(torch.nn.Module):
         self.out_features = out_features
         self.in_features = in_features
 
-        # NOTE: Initialize row-major weight matrix, meaning each row's (i.e. in_features dim) memory will be contiguous
+        # NOTE: Weight matrix is initialized in row-major, meaning each row's (i.e. in_features dim) memory will be contiguous
+        # This makes matmul more efficient
         self.W = torch.nn.Parameter(torch.empty(out_features, in_features, device=device, dtype=dtype))
         self.reset_parameters()
 
@@ -55,7 +56,7 @@ class Embedding(torch.nn.Module):
         Returns:
             torch.Tensor: (batch_size, sequence_length, d_model)
         """
-        # self.emb: (vocab_size, d_model)
+        # Recall that self.emb: (vocab_size, d_model)
         return torch.stack([self.emb[token_ids[i], :] for i in range(token_ids.size(0))], dim=0)
 
     def reset_parameters(self):
@@ -76,7 +77,6 @@ class RMSNorm(torch.nn.Module):
         self.device = device
         self.dtype = dtype
 
-        # Learnable scaling factor for all tokens
         self.gain = torch.nn.Parameter(torch.ones(self.d_model))  # (d_model,)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -88,6 +88,8 @@ class RMSNorm(torch.nn.Module):
         """
         in_dtype = x.dtype
         x = x.to(torch.float32)
+        # NOTE: Root mean square is computed along the feature dimension, meaning each token
+        # is normalized w.r.t. its own features. The gain is applied on each feature for all tokens.
         rms = torch.sqrt((1 / self.d_model) * torch.sum(x**2, dim=-1) + self.eps).unsqueeze(
             -1
         )  # (batch_size, sequence_length, 1)
@@ -146,7 +148,7 @@ class RotaryPositionalEmbedding(torch.nn.Module):
         super().__init__()
         # Pre-compute rotation matrix entries
         assert d_k % 2 == 0, "d_k must be even"
-        # The rotaion depends on token index i and feature unit k
+        # The rotaion angle depends on token index i and feature index k
         # So we pre-populate some matrices for element-wise multiplication
         # NOTE: In the assignment, k starts from 1 to d/2. We change it to [0, d/2-1]
         # and compute the cos/ sin accordingly. Turns out this is correct...
@@ -164,7 +166,7 @@ class RotaryPositionalEmbedding(torch.nn.Module):
 
     def forward(self, x: torch.Tensor, token_positions: torch.Tensor) -> torch.Tensor:
         """
-        Apply rotation matrix operation on each pair of entries from input's final d_k dim.
+        Apply rotation matrix operation on each pair of entries from input's d_k dim.
         Rotation matrix is defined as
             [cos(theta_i_k), -sin(theta_i_k)]
             [sin(theta_i_k),  cos(theta_i_k)]
@@ -186,3 +188,14 @@ class RotaryPositionalEmbedding(torch.nn.Module):
                 sin_vals * x[..., 2 * k] + cos_vals * x[..., 2 * k + 1],
             )
         return x
+
+
+def softmax(x: torch.Tensor, dim: int):
+    """
+    Apply softmax on x along a given dimension
+    """
+    # NOTE: Shift all values to <= 0 to avoid overflow with exp
+    x = x - torch.max(x)
+    return torch.exp(x) / torch.sum(torch.exp(x), dim=dim, keepdim=True) # Keep the dim to broadcast divide operation
+    
+        
