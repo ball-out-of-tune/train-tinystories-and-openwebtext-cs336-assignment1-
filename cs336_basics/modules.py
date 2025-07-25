@@ -1,5 +1,6 @@
 import torch
 import logging
+from einops import rearrange, repeat
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +63,6 @@ class Embedding(torch.nn.Module):
 
 
 class RMSNorm(torch.nn.Module):
-    
     def __init__(
         self,
         d_model: int,
@@ -75,10 +75,10 @@ class RMSNorm(torch.nn.Module):
         self.eps = eps
         self.device = device
         self.dtype = dtype
-        
+
         # Learnable scaling factor for all tokens
         self.gain = torch.nn.Parameter(torch.ones(self.d_model))  # (d_model,)
-    
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
         Args:
@@ -88,7 +88,9 @@ class RMSNorm(torch.nn.Module):
         """
         in_dtype = x.dtype
         x = x.to(torch.float32)
-        rms = torch.sqrt((1 / self.d_model) * torch.sum(x ** 2, dim=-1) + self.eps).unsqueeze(-1)  # (batch_size, sequence_length, 1) 
+        rms = torch.sqrt((1 / self.d_model) * torch.sum(x**2, dim=-1) + self.eps).unsqueeze(
+            -1
+        )  # (batch_size, sequence_length, 1)
         rms_norm = x / rms * self.gain
         return rms_norm.to(in_dtype)
 
@@ -104,6 +106,7 @@ def silu(in_features: torch.Tensor):
     """
     return in_features * torch.sigmoid(in_features)
 
+
 class SwiGLUFFN(torch.nn.Module):
     def __init__(self, d_model: int, d_ff: int):
         super().__init__()
@@ -112,9 +115,9 @@ class SwiGLUFFN(torch.nn.Module):
         self.w1 = torch.nn.Parameter(torch.empty(d_ff, d_model))
         self.w2 = torch.nn.Parameter(torch.empty(d_model, d_ff))
         self.w3 = torch.nn.Parameter(torch.empty(d_ff, d_model))
-        
+
         self.reset_parameters()
-    
+
     def forward(self, in_features: torch.Tensor):
         """
         Args:
@@ -125,8 +128,61 @@ class SwiGLUFFN(torch.nn.Module):
         g = silu(in_features @ self.w1.T)  # gate: (..., d_ff)
         x = in_features @ self.w3.T  # activation: (..., d_ff)
         return (g * x) @ self.w2.T  # (..., d_model)
-    
+
     def reset_parameters(self):
         torch.nn.init.trunc_normal_(self.w1, mean=0, std=2 / (self.d_ff + self.d_model))
         torch.nn.init.trunc_normal_(self.w2, mean=0, std=2 / (self.d_model + self.d_ff))
         torch.nn.init.trunc_normal_(self.w3, mean=0, std=2 / (self.d_ff + self.d_model))
+
+
+class RotaryPositionalEmbedding(torch.nn.Module):
+    def __init__(
+        self,
+        theta: float,
+        d_k: int,
+        max_seq_len: int,
+        device: torch.device | None = None,
+    ):
+        super().__init__()
+        # Pre-compute rotation matrix entries
+        assert d_k % 2 == 0, "d_k must be even"
+        # The rotaion depends on token index i and feature unit k
+        # So we pre-populate some matrices for element-wise multiplication
+        # NOTE: In the assignment, k starts from 1 to d/2. We change it to [0, d/2-1]
+        # and compute the cos/ sin accordingly. Turns out this is correct...
+        i = torch.arange(max_seq_len).unsqueeze(-1).expand(-1, d_k // 2)  # (max_seq_len, d_k // 2)
+        k = torch.arange(d_k // 2).unsqueeze(0).expand(max_seq_len, -1)  # (max_seq_len, d_k // 2)
+
+        r_cos = torch.cos(i / theta ** (2 * k / d_k))  # (max_seq_len, d_k // 2)
+        r_sin = torch.sin(i / theta ** (2 * k / d_k))  # (max_seq_len, d_k // 2)
+
+        self.register_buffer("r_cos", r_cos, persistent=False)
+        self.register_buffer("r_sin", r_sin, persistent=False)
+
+        self.d_k = d_k
+        self.theta = theta
+
+    def forward(self, x: torch.Tensor, token_positions: torch.Tensor) -> torch.Tensor:
+        """
+        Apply rotation matrix operation on each pair of entries from input's final d_k dim.
+        Rotation matrix is defined as
+            [cos(theta_i_k), -sin(theta_i_k)]
+            [sin(theta_i_k),  cos(theta_i_k)]
+        Args:
+            x (torch.Tensor): (..., seq_len, d_k)
+            token_positions (torch.Tensor): (..., seq_len)
+
+        Returns:
+            torch.Tensor: (..., seq_len, d_k)
+        """
+        # NOTE: Iterate each pair of embedding elements and compute rotation
+        # using the cos/ sin buffer, so that we don't need to construct the full rotation matrix
+        for k in range(self.d_k // 2):
+            cos_vals = self.r_cos[token_positions, k]  # (seq_len,)
+            sin_vals = self.r_sin[token_positions, k]  # (seq_len,)
+            # Apply rotation matrix
+            x[..., 2 * k], x[..., 2 * k + 1] = (
+                cos_vals * x[..., 2 * k] - sin_vals * x[..., 2 * k + 1],
+                sin_vals * x[..., 2 * k] + cos_vals * x[..., 2 * k + 1],
+            )
+        return x
