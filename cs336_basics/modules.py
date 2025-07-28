@@ -76,7 +76,8 @@ class RMSNorm(torch.nn.Module):
         self.eps = eps
         self.device = device
         self.dtype = dtype
-
+        # NOTE: This is an affine transformation of the normalized features
+        # applied on all tokens
         self.gain = torch.nn.Parameter(torch.ones(self.d_model))  # (d_model,)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -224,7 +225,7 @@ def scaled_dot_product_attention(
     # NOTE: Make masked entry's probability to be 0 after softmax, thus no attention is paid
     prod[..., ~mask.to(torch.bool)] = -torch.inf
     sm = softmax(prod, dim=-1)  # (seq_len_q, seq_len_k) where each row along seq_len_k is normalized
-    return sm @ v # Linear combination of vs for each q, using k as "probability": (seq_len_q, d_v)
+    return sm @ v  # Linear combination of vs for each q, using k as "probability": (seq_len_q, d_v)
 
 
 class MultiHeadSelfAttention(torch.nn.Module):
@@ -254,6 +255,8 @@ class MultiHeadSelfAttention(torch.nn.Module):
         self.w_v = torch.nn.Parameter(torch.empty(num_heads * self.d_v, d_model))
         self.w_o = torch.nn.Parameter(torch.empty(d_model, num_heads * self.d_v))
 
+        self.reset_parameters()
+
         if self.rope_enabled:
             self.rope = RotaryPositionalEmbedding(theta=theta, d_k=self.d_k, max_seq_len=max_seq_len)
 
@@ -263,14 +266,17 @@ class MultiHeadSelfAttention(torch.nn.Module):
             x (torch.Tensor): (..., seq_len, d_model)
             token_positions (torch.Tensor): (..., seq_len)
         """
-        if self.rope_enabled:
-            assert token_positions is not None
-
         assert x.size(-1) == self.d_model
         seq_len = x.size(-2)
+        if self.rope_enabled and token_positions is None:
+            logger.info(f"Token position is not provided. Assume {token_positions}")
+            token_positions = torch.arange(seq_len)
+            
         # Step 1: Apply single matrix multiplication to project q, k, v vectors for all heads
         # Each output feature vector is a linear combination of weight values and input x
-        w_qkv = torch.concat((self.w_q.T, self.w_k.T, self.w_v.T), dim=-1)  # (num_heads * d_q + num_heads * d_k + num_heads * d_v, d_model)
+        w_qkv = torch.concat(
+            (self.w_q.T, self.w_k.T, self.w_v.T), dim=-1
+        )  # (num_heads * d_q + num_heads * d_k + num_heads * d_v, d_model)
         qkv = x @ w_qkv  # (..., seq_len, num_heads * d_q + num_heads * d_k + num_heads * d_v)
 
         # Step 2: Slice q, k, v for each head.
@@ -278,16 +284,9 @@ class MultiHeadSelfAttention(torch.nn.Module):
         # - Split q, k, v
         q, k, v = qkv.chunk(3, dim=-1)  # # (..., num_heads, seq_len, d_q)
         # # - Split head
-        q = einops.rearrange(
-            q, "... s (h d) -> ... h s d", h=self.num_heads
-        )  # (..., num_heads, seq_len_q, d_q)
-        k = einops.rearrange(
-            k, "... s (h d) -> ... h s d", h=self.num_heads
-        )  # (..., num_heads, seq_len_k, d_k)
-        v = einops.rearrange(
-            v, "... s (h d) -> ... h s d", h=self.num_heads
-        )  # (..., num_heads, seq_len_v, d_v
-        
+        q = einops.rearrange(q, "... s (h d) -> ... h s d", h=self.num_heads)  # (..., num_heads, seq_len_q, d_q)
+        k = einops.rearrange(k, "... s (h d) -> ... h s d", h=self.num_heads)  # (..., num_heads, seq_len_k, d_k)
+        v = einops.rearrange(v, "... s (h d) -> ... h s d", h=self.num_heads)  # (..., num_heads, seq_len_v, d_v
 
         if self.rope_enabled:
             # Step 3: Apply RoPE to the query and key vectors, but not the value vectors.
@@ -313,3 +312,34 @@ class MultiHeadSelfAttention(torch.nn.Module):
         # Step 6: Combine output from all heads and project to output dimension
         out = einops.rearrange(out, "... h s d -> ... s (h d)")  # (..., seq_len, num_heads * d_v)
         return out @ self.w_o.T  # (..., seq_len, d_model)
+
+    def reset_parameters(self):
+        torch.nn.init.trunc_normal_(self.w_q, mean=0, std=2 / (self.d_model + self.d_model))
+        torch.nn.init.trunc_normal_(self.w_k, mean=0, std=2 / (self.d_model + self.d_model))
+        torch.nn.init.trunc_normal_(self.w_v, mean=0, std=2 / (self.d_model + self.d_model))
+
+
+class TransformerBlock(torch.nn.Module):
+    def __init__(
+        self,
+        d_model: int,
+        num_heads: int,
+        d_ff: int,
+        max_seq_len: int,
+        theta: float,
+    ):
+        super().__init__()
+        
+        self.attn_pre_ln = RMSNorm(d_model=d_model)
+        self.attn = MultiHeadSelfAttention(
+            d_model=d_model,
+            num_heads=num_heads,
+            max_seq_len=max_seq_len,
+            theta=theta,
+        )
+        self.ffn_pre_ln = RMSNorm(d_model=d_model)
+        self.ffn = SwiGLUFFN(d_model=d_model, d_ff=d_ff)
+
+    def forward(self, x: torch.Tensor):
+        attn_output = x + self.attn(self.attn_pre_ln(x))
+        return attn_output + self.ffn(self.ffn_pre_ln(attn_output))

@@ -12,6 +12,7 @@ from cs336_basics.modules import (
     RMSNorm,
     RotaryPositionalEmbedding,
     SwiGLUFFN,
+    TransformerBlock,
     scaled_dot_product_attention,
     silu,
     softmax,
@@ -314,7 +315,27 @@ def run_transformer_block(
         Float[Tensor, "batch sequence_length d_model"] Tensor with the output of
         running the Transformer block on the input features while using RoPE.
     """
-    raise NotImplementedError
+    block = TransformerBlock(
+        d_model=d_model,
+        num_heads=num_heads,
+        d_ff=d_ff,
+        max_seq_len=max_seq_len,
+        theta=theta,
+    )
+    block.load_state_dict(
+        {
+            "attn.w_q": weights["attn.q_proj.weight"],
+            "attn.w_k": weights["attn.k_proj.weight"],
+            "attn.w_v": weights["attn.v_proj.weight"],
+            "attn.w_o": weights["attn.output_proj.weight"],
+            "attn_pre_ln.gain": weights["ln1.weight"],
+            "ffn.w1": weights["ffn.w1.weight"],
+            "ffn.w2": weights["ffn.w2.weight"],
+            "ffn.w3": weights["ffn.w3.weight"],
+            "ffn_pre_ln.gain": weights["ln2.weight"],
+        }
+    )
+    return block.forward(in_features)
 
 
 def run_transformer_lm(
