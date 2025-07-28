@@ -341,6 +341,7 @@ class TransformerBlock(torch.nn.Module):
 
     def forward(self, x: torch.Tensor):
         attn_output = x + self.attn(self.attn_pre_ln(x))
+        # NOTE: The residual input for FFN is attn_output, not x
         return attn_output + self.ffn(self.ffn_pre_ln(attn_output))
 
 
