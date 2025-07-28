@@ -197,7 +197,7 @@ def softmax(x: torch.Tensor, dim: int):
     """
     # NOTE: Shift all values to <= 0 to avoid overflow with exp
     x = x - torch.max(x)
-    return torch.exp(x) / torch.sum(torch.exp(x), dim=dim, keepdim=True) # Keep the dim to broadcast divide operation
+    return torch.exp(x) / torch.sum(torch.exp(x), dim=dim, keepdim=True)  # Keep the dim to broadcast divide operation
 
 
 def scaled_dot_product_attention(
@@ -211,20 +211,105 @@ def scaled_dot_product_attention(
         q (torch.Tensor): (batch_size, ..., seq_len_q, d_k)
         k (torch.Tensor): (batch_size, ..., seq_len_k, d_k)
         v (torch.Tensor): (batch_size, ..., seq_len_k, d_v)
-        mask (torch.Tensor): (seq_len, seq_len)
+        mask (torch.Tensor): (seq_len_q, seq_len_k)
             **Note that mask is True if attention is allowed, False otherwise**
     """
-    print(q.shape, k.shape)
+    assert q.size(-1) == k.size(-1)  # Feature dim must match between q and k
+    assert k.size(-2) == v.size(-2)  # Sequence length must match between k and v
+
     prod = (
         # NOTE: Can also use einops.einsum(q, k, "... q d,... k d->... q k"), but slower for some reason
-        torch.einsum("...qd,...kd->...qk", q, k) 
-        / torch.sqrt(torch.tensor(k.size(-1), dtype=torch.int))
+        torch.einsum("...qd,...kd->...qk", q, k) / torch.sqrt(torch.tensor(k.size(-1), dtype=torch.int))
     )
     # NOTE: Make masked entry's probability to be 0 after softmax, thus no attention is paid
-    prod[~mask.to(torch.bool)] = -torch.inf
-    sm = softmax(prod, dim=-1) # (seq_len_q, seq_len_k) where each row along seq_len_k is normalized
-    return sm @ v
-    
-    
-    
+    prod[..., ~mask.to(torch.bool)] = -torch.inf
+    sm = softmax(prod, dim=-1)  # (seq_len_q, seq_len_k) where each row along seq_len_k is normalized
+    return sm @ v # Linear combination of vs for each q, using k as "probability": (seq_len_q, d_v)
+
+
+class MultiHeadSelfAttention(torch.nn.Module):
+    def __init__(
+        self,
+        d_model: int,
+        num_heads: int,
+        max_seq_len: int | None = None,
+        theta: float | None = None,
+    ):
+        super().__init__()
+
+        assert d_model % num_heads == 0, "d_model must be a multiple of num_heads"
+        self.d_model = d_model
+        self.num_heads = num_heads
+        self.rope_enabled = max_seq_len is not None and theta is not None
+
+        # NOTE: Following Vaswani et al. [2017], we set d_k = d_v = d_model / num_heads
+        # but it does not have to be. For example, we can project from d_model to h * d_k > d_model
+        self.d_q = d_model // num_heads
+        self.d_k = d_model // num_heads
+        self.d_v = d_model // num_heads
+
+        # NOTE: Similar to Linear, we build a row-major weight matrix on input dimension for efficiency
+        self.w_q = torch.nn.Parameter(torch.empty(num_heads * self.d_q, d_model))
+        self.w_k = torch.nn.Parameter(torch.empty(num_heads * self.d_k, d_model))
+        self.w_v = torch.nn.Parameter(torch.empty(num_heads * self.d_v, d_model))
+        self.w_o = torch.nn.Parameter(torch.empty(d_model, num_heads * self.d_v))
+
+        if self.rope_enabled:
+            self.rope = RotaryPositionalEmbedding(theta=theta, d_k=self.d_k, max_seq_len=max_seq_len)
+
+    def forward(self, x: torch.Tensor, token_positions: torch.Tensor | None = None):
+        """
+        Args:
+            x (torch.Tensor): (..., seq_len, d_model)
+            token_positions (torch.Tensor): (..., seq_len)
+        """
+        if self.rope_enabled:
+            assert token_positions is not None
+
+        assert x.size(-1) == self.d_model
+        seq_len = x.size(-2)
+        # Step 1: Apply single matrix multiplication to project q, k, v vectors for all heads
+        # Each output feature vector is a linear combination of weight values and input x
+        w_qkv = torch.concat((self.w_q.T, self.w_k.T, self.w_v.T), dim=-1)  # (num_heads * d_q + num_heads * d_k + num_heads * d_v, d_model)
+        qkv = x @ w_qkv  # (..., seq_len, num_heads * d_q + num_heads * d_k + num_heads * d_v)
+
+        # Step 2: Slice q, k, v for each head.
+        # NOTE: Need to split q, k, v first due to concat order
+        # - Split q, k, v
+        q, k, v = qkv.chunk(3, dim=-1)  # # (..., num_heads, seq_len, d_q)
+        # # - Split head
+        q = einops.rearrange(
+            q, "... s (h d) -> ... h s d", h=self.num_heads
+        )  # (..., num_heads, seq_len_q, d_q)
+        k = einops.rearrange(
+            k, "... s (h d) -> ... h s d", h=self.num_heads
+        )  # (..., num_heads, seq_len_k, d_k)
+        v = einops.rearrange(
+            v, "... s (h d) -> ... h s d", h=self.num_heads
+        )  # (..., num_heads, seq_len_v, d_v
         
+
+        if self.rope_enabled:
+            # Step 3: Apply RoPE to the query and key vectors, but not the value vectors.
+            # NOTE: The same RoPE rotation should be applied to the query and key vectors for each head
+            # Thus each RoPE embedding should have d_k length
+            q, k = self.rope(q, token_positions), self.rope(k, token_positions)
+
+        # Step 4: Create causal attention mask (same mask)
+        # NOTE: Set the diagnal and every entry below it as 1 for causal attention
+        # An example of 5x5 is as following
+        # 1 0 0 0 0
+        # 1 1 0 0 0
+        # 1 1 1 0 0
+        # 1 1 1 1 0
+        # 1 1 1 1 1
+        # Conveniently, we can directly transpose an upper-triangular matrix like below
+        # since sequence len is the same between Q and K for self-attention
+        mask = torch.triu(torch.ones(seq_len, seq_len)).T.to(torch.bool)
+
+        # Step 5: Run scale dot product attention on each head
+        out = scaled_dot_product_attention(q, k, v, mask)  # (..., num_heads, seq_len, d_v)
+
+        # Step 6: Combine output from all heads and project to output dimension
+        out = einops.rearrange(out, "... h s d -> ... s (h d)")  # (..., seq_len, num_heads * d_v)
+        return out @ self.w_o.T  # (..., seq_len, d_model)
