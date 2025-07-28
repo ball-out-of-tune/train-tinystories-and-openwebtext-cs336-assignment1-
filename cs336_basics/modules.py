@@ -271,7 +271,7 @@ class MultiHeadSelfAttention(torch.nn.Module):
         if self.rope_enabled and token_positions is None:
             logger.info(f"Token position is not provided. Assume {token_positions}")
             token_positions = torch.arange(seq_len)
-            
+
         # Step 1: Apply single matrix multiplication to project q, k, v vectors for all heads
         # Each output feature vector is a linear combination of weight values and input x
         w_qkv = torch.concat(
@@ -325,11 +325,10 @@ class TransformerBlock(torch.nn.Module):
         d_model: int,
         num_heads: int,
         d_ff: int,
-        max_seq_len: int,
-        theta: float,
+        max_seq_len: int | None = None,
+        theta: float | None = None,
     ):
         super().__init__()
-        
         self.attn_pre_ln = RMSNorm(d_model=d_model)
         self.attn = MultiHeadSelfAttention(
             d_model=d_model,
@@ -343,3 +342,40 @@ class TransformerBlock(torch.nn.Module):
     def forward(self, x: torch.Tensor):
         attn_output = x + self.attn(self.attn_pre_ln(x))
         return attn_output + self.ffn(self.ffn_pre_ln(attn_output))
+
+
+class TransformerLM(torch.nn.Module):
+    def __init__(
+        self,
+        vocab_size: int,
+        context_length: int,
+        num_layers: int,
+        d_model: int,
+        num_heads: int,
+        d_ff: int,
+        rope_theta: float,
+    ):
+        super().__init__()
+        self.token_embeddings = Embedding(num_embeddings=vocab_size, embedding_dim=d_model)
+        self.layers = torch.nn.Sequential(
+            *[
+                TransformerBlock(
+                    d_model=d_model,
+                    num_heads=num_heads,
+                    d_ff=d_ff,
+                    max_seq_len=context_length,
+                    theta=rope_theta,
+                )
+                for _ in range(num_layers)
+            ]
+        )
+        self.ln_final = RMSNorm(d_model=d_model)
+        self.lm_head = Linear(in_features=d_model, out_features=vocab_size)
+
+    def forward(self, x: torch.Tensor):
+        embeddings = self.token_embeddings(x)
+        attn_output = self.layers(embeddings)
+        output = self.lm_head(self.ln_final(attn_output))
+        # NOTE: We don't compute softmax here and will do it
+        # in the loss function
+        return output

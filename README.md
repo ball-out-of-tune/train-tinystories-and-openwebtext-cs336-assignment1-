@@ -49,7 +49,7 @@ cd ..
 ```
 
 ## Test Results
-### Problem (`train_bpe`): BPE Tokenizer Training
+### BPE Training
 ```
 cs336-basicsziyitang@Ziyis-MacBook-Air assignment1-basics % uv run pytest tests/test_train_bpe.py 
 ==================================================== test session starts =====================================================
@@ -65,7 +65,7 @@ tests/test_train_bpe.py::test_train_bpe_special_tokens PASSED
 
 ===================================================== 3 passed in 2.10s ======================================================
 ```
-### Problem (`tokenizer`): Implementing the tokenizer
+### Tokenizer
 ```
 cs336-basicsziyitang@Ziyis-MacBook-Air assignment1-basics % uv run pytest tests/test_tokenizer.py              
 ==================================================== test session starts =====================================================
@@ -102,4 +102,30 @@ tests/test_tokenizer.py::test_encode_iterable_memory_usage SKIPPED (rlimit suppo
 tests/test_tokenizer.py::test_encode_memory_usage SKIPPED (rlimit support for non-linux systems is spotty.)
 
 ========================================== 23 passed, 2 skipped in 93.03s (0:01:33) ==========================================
+```
+### Model
+```
+cs336-basicsziyitang@MacBookAir assignment1-basics % uv run pytest tests/test_model.py
+================================ test session starts ================================
+platform darwin -- Python 3.13.5, pytest-8.3.5, pluggy-1.5.0
+rootdir: /Users/ziyitang/stanford-cs336/assignment1-basics
+configfile: pyproject.toml
+plugins: jaxtyping-0.3.1
+collected 13 items                                                                  
+
+tests/test_model.py::test_linear PASSED
+tests/test_model.py::test_embedding PASSED
+tests/test_model.py::test_swiglu PASSED
+tests/test_model.py::test_scaled_dot_product_attention PASSED
+tests/test_model.py::test_4d_scaled_dot_product_attention PASSED
+tests/test_model.py::test_multihead_self_attention PASSED
+tests/test_model.py::test_multihead_self_attention_with_rope PASSED
+tests/test_model.py::test_transformer_lm PASSED
+tests/test_model.py::test_transformer_lm_truncated_input PASSED
+tests/test_model.py::test_transformer_block PASSED
+tests/test_model.py::test_rmsnorm PASSED
+tests/test_model.py::test_rope PASSED
+tests/test_model.py::test_silu_matches_pytorch PASSED
+
+================================ 13 passed in 0.62s =================================
 ```
