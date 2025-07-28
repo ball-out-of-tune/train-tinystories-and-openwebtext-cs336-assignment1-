@@ -268,9 +268,6 @@ class MultiHeadSelfAttention(torch.nn.Module):
         """
         assert x.size(-1) == self.d_model
         seq_len = x.size(-2)
-        if self.rope_enabled and token_positions is None:
-            logger.info(f"Token position is not provided. Assume {token_positions}")
-            token_positions = torch.arange(seq_len)
 
         # Step 1: Apply single matrix multiplication to project q, k, v vectors for all heads
         # Each output feature vector is a linear combination of weight values and input x
@@ -292,6 +289,9 @@ class MultiHeadSelfAttention(torch.nn.Module):
             # Step 3: Apply RoPE to the query and key vectors, but not the value vectors.
             # NOTE: The same RoPE rotation should be applied to the query and key vectors for each head
             # Thus each RoPE embedding should have d_k length
+            if token_positions is None:
+                token_positions = torch.arange(seq_len)
+                logger.info(f"Token position is not provided. Assume {token_positions}")
             q, k = self.rope(q, token_positions), self.rope(k, token_positions)
 
         # Step 4: Create causal attention mask (same mask)
