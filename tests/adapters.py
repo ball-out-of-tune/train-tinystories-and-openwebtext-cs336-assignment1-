@@ -18,6 +18,7 @@ from cs336_basics.modules import (
     silu,
     softmax,
 )
+from cs336_basics.loss import cross_entropy_loss
 
 import numpy.typing as npt
 import torch
@@ -541,7 +542,7 @@ def run_cross_entropy(
     Returns:
         Float[Tensor, ""]: The average cross-entropy loss across examples.
     """
-    raise NotImplementedError
+    return cross_entropy_loss(inputs, targets)
 
 
 def run_gradient_clipping(parameters: Iterable[torch.nn.Parameter], max_l2_norm: float) -> None:

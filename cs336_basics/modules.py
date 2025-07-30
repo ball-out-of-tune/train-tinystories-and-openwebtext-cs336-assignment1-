@@ -197,7 +197,7 @@ def softmax(x: torch.Tensor, dim: int):
     Apply softmax on x along a given dimension
     """
     # NOTE: Shift all values to <= 0 to avoid overflow with exp
-    x = x - torch.max(x)
+    x = x - torch.max(x, dim=dim, keepdim=True).values
     return torch.exp(x) / torch.sum(torch.exp(x), dim=dim, keepdim=True)  # Keep the dim to broadcast divide operation
 
 
