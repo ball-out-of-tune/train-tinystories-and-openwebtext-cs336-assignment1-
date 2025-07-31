@@ -38,7 +38,8 @@ class AdamW(torch.optim.Optimizer):
                 t = state.get("t", 1)  # Iteration number starts from 1
                 m = state.get("m", torch.zeros_like(param.data))
                 v = state.get("v", torch.zeros_like(param.data))
-                # Compute the gradient of the loss at the current time step
+                # Get the gradient of the loss at the current time step
+                # grad is already detached from the graph so can use it directly
                 grad = param.grad
                 # Update the first moment estimate
                 m = b1 * m + (1 - b1) * grad
@@ -46,11 +47,12 @@ class AdamW(torch.optim.Optimizer):
                 v = b2 * v + (1 - b2) * grad**2
                 # Compute adjusted α for iteration t
                 alpha = lr * math.sqrt(1 - b2**t) / (1 - b1**t)
-                # Update the parameters
-                # breakpoint()
-                param.data = param.data - alpha * m / (torch.sqrt(v) + eps)
-                # Apply weight decay
-                param.data = param.data - lr * decay * param.data
+                # Update the parameters in-place but don't track the gradient
+                # equivalent to do param.data.sub_(...)
+                with torch.no_grad():
+                    param.sub_(alpha * m / (torch.sqrt(v) + eps))
+                    # Apply weight decay
+                    param.sub_(lr * decay * param.data)
                 # NOTE: Update states in the end
                 state["m"] = m
                 state["v"] = v
@@ -84,5 +86,21 @@ def cosine_annealing_lr_scheduler(
         # Stage 2: Gradually reduce learning rate from max to min
         return lr_min + (lr_max - lr_min) * 0.5 * (1 + math.cos((t - T_w) / (T_c - T_w) * math.pi))
     else:
-        # Keep min learning rate
+        # Step 3: Keep min learning rate
         return lr_min
+
+
+def gradient_clipping(params: Iterable[torch.nn.Parameter], max_norm: float):
+    all_grads = []
+    for p in params:
+        if p.grad is None:
+            continue
+        all_grads.append(p.grad.flatten())
+
+    # NOTE: Compute L2 Norm on flattend gradient from all parameters
+    grad_norm = torch.linalg.norm(torch.concat(all_grads), ord=2)
+    if grad_norm > max_norm:
+        for p in params:
+            if p.grad is None:
+                continue
+            p.grad = p.grad * max_norm / (grad_norm + 1e-6)
