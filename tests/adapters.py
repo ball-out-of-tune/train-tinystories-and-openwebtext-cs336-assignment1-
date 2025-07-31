@@ -19,7 +19,7 @@ from cs336_basics.modules import (
     softmax,
 )
 from cs336_basics.loss import cross_entropy_loss
-from cs336_basics.optim import AdamW
+from cs336_basics.optim import AdamW, cosine_annealing_lr_scheduler
 import numpy.typing as npt
 import torch
 from torch import Tensor
@@ -161,13 +161,15 @@ def run_multihead_self_attention(
         d_model=d_model,
         num_heads=num_heads,
     )
-    mha.load_state_dict({
-        # Concat q, k, v into the same matrix
-        "w_q": q_proj_weight,
-        "w_k": k_proj_weight,
-        "w_v": v_proj_weight,
-        "w_o": o_proj_weight,
-    })
+    mha.load_state_dict(
+        {
+            # Concat q, k, v into the same matrix
+            "w_q": q_proj_weight,
+            "w_k": k_proj_weight,
+            "w_v": v_proj_weight,
+            "w_o": o_proj_weight,
+        }
+    )
     return mha.forward(in_features)
 
 
@@ -214,13 +216,15 @@ def run_multihead_self_attention_with_rope(
         max_seq_len=max_seq_len,
         theta=theta,
     )
-    mha.load_state_dict({
-        # Concat q, k, v into the same matrix
-        "w_q": q_proj_weight,
-        "w_k": k_proj_weight,
-        "w_v": v_proj_weight,
-        "w_o": o_proj_weight,
-    })
+    mha.load_state_dict(
+        {
+            # Concat q, k, v into the same matrix
+            "w_q": q_proj_weight,
+            "w_k": k_proj_weight,
+            "w_v": v_proj_weight,
+            "w_o": o_proj_weight,
+        }
+    )
     return mha.forward(in_features, token_positions=token_positions)
 
 
@@ -434,17 +438,19 @@ def run_transformer_lm(
         "lm_head.W": weights["lm_head.weight"],
     }
     for i in range(num_layers):
-        state_dict.update({
-            f"layers.{i}.attn_pre_ln.gain": weights[f"layers.{i}.ln1.weight"],
-            f"layers.{i}.attn.w_q": weights[f"layers.{i}.attn.q_proj.weight"],
-            f"layers.{i}.attn.w_k": weights[f"layers.{i}.attn.k_proj.weight"],
-            f"layers.{i}.attn.w_v": weights[f"layers.{i}.attn.v_proj.weight"],
-            f"layers.{i}.attn.w_o": weights[f"layers.{i}.attn.output_proj.weight"],
-            f"layers.{i}.ffn_pre_ln.gain": weights[f"layers.{i}.ln2.weight"],
-            f"layers.{i}.ffn.w1": weights[f"layers.{i}.ffn.w1.weight"],
-            f"layers.{i}.ffn.w2": weights[f"layers.{i}.ffn.w2.weight"],
-            f"layers.{i}.ffn.w3": weights[f"layers.{i}.ffn.w3.weight"],
-        })
+        state_dict.update(
+            {
+                f"layers.{i}.attn_pre_ln.gain": weights[f"layers.{i}.ln1.weight"],
+                f"layers.{i}.attn.w_q": weights[f"layers.{i}.attn.q_proj.weight"],
+                f"layers.{i}.attn.w_k": weights[f"layers.{i}.attn.k_proj.weight"],
+                f"layers.{i}.attn.w_v": weights[f"layers.{i}.attn.v_proj.weight"],
+                f"layers.{i}.attn.w_o": weights[f"layers.{i}.attn.output_proj.weight"],
+                f"layers.{i}.ffn_pre_ln.gain": weights[f"layers.{i}.ln2.weight"],
+                f"layers.{i}.ffn.w1": weights[f"layers.{i}.ffn.w1.weight"],
+                f"layers.{i}.ffn.w2": weights[f"layers.{i}.ffn.w2.weight"],
+                f"layers.{i}.ffn.w3": weights[f"layers.{i}.ffn.w3.weight"],
+            }
+        )
     lm.load_state_dict(state_dict)
     return lm(in_indices)
 
@@ -589,7 +595,13 @@ def run_get_lr_cosine_schedule(
     Returns:
         Learning rate at the given iteration under the specified schedule.
     """
-    raise NotImplementedError
+    return cosine_annealing_lr_scheduler(
+        it,
+        max_learning_rate,
+        min_learning_rate,
+        warmup_iters,
+        cosine_cycle_iters,
+    )
 
 
 def run_save_checkpoint(
