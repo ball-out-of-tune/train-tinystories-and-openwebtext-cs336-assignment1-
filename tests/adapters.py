@@ -19,7 +19,7 @@ from cs336_basics.modules import (
     softmax,
 )
 from cs336_basics.loss import cross_entropy_loss
-
+from cs336_basics.optim import AdamW
 import numpy.typing as npt
 import torch
 from torch import Tensor
@@ -561,7 +561,7 @@ def get_adamw_cls() -> type[torch.optim.Optimizer]:
     """
     Returns a torch.optim.Optimizer that implements AdamW.
     """
-    raise NotImplementedError
+    return AdamW
 
 
 def run_get_lr_cosine_schedule(
