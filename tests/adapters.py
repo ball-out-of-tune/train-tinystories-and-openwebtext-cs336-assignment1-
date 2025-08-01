@@ -18,6 +18,7 @@ from cs336_basics.modules import (
     silu,
     softmax,
 )
+from cs336_basics.data import get_batch
 from cs336_basics.loss import cross_entropy_loss
 from cs336_basics.optim import AdamW, cosine_annealing_lr_scheduler, gradient_clipping
 import numpy.typing as npt
@@ -514,7 +515,7 @@ def run_get_batch(
         is the sampled input sequences, and the second tuple item is the corresponding
         language modeling labels.
     """
-    raise NotImplementedError
+    return get_batch(dataset, batch_size, context_length, device)
 
 
 def run_softmax(in_features: Float[Tensor, " ..."], dim: int) -> Float[Tensor, " ..."]:
