@@ -17,4 +17,4 @@ def get_batch(
     for idx in sample_start_idx:
         inputs.append(dataset[idx : idx + context_length])
         targets.append(dataset[idx + 1 : idx + 1 + context_length])
-    return torch.tensor(inputs, device=device), torch.tensor(targets, device=device)
+    return torch.tensor(np.array(inputs), device=device), torch.tensor(np.array(targets), device=device)

@@ -129,3 +129,62 @@ tests/test_model.py::test_silu_matches_pytorch PASSED
 
 ================================ 13 passed in 0.62s =================================
 ```
+### Loss & Utils
+```
+cs336-basicsziyitang@MacBookAir assignment1-basics %  uv run pytest tests/test_nn_utils.py 
+============================================ test session starts ============================================
+platform darwin -- Python 3.13.5, pytest-8.3.5, pluggy-1.5.0
+rootdir: /Users/ziyitang/stanford-cs336/assignment1-basics
+configfile: pyproject.toml
+plugins: jaxtyping-0.3.1
+collected 3 items                                                                                           
+
+tests/test_nn_utils.py::test_softmax_matches_pytorch PASSED
+tests/test_nn_utils.py::test_cross_entropy PASSED
+tests/test_nn_utils.py::test_gradient_clipping PASSED
+
+============================================= 3 passed in 0.08s =============================================
+```
+### Optimizer
+```
+cs336-basicsziyitang@MacBookAir assignment1-basics %  uv run pytest tests/test_optimizer.py 
+============================================ test session starts ============================================
+platform darwin -- Python 3.13.5, pytest-8.3.5, pluggy-1.5.0
+rootdir: /Users/ziyitang/stanford-cs336/assignment1-basics
+configfile: pyproject.toml
+plugins: jaxtyping-0.3.1
+collected 2 items                                                                                           
+
+tests/test_optimizer.py::test_adamw PASSED
+tests/test_optimizer.py::test_get_lr_cosine_schedule PASSED
+
+============================================= 2 passed in 0.84s =============================================
+```
+### Data
+```
+cs336-basicsziyitang@MacBookAir assignment1-basics %  uv run pytest tests/test_data.py
+============================================ test session starts ============================================
+platform darwin -- Python 3.13.5, pytest-8.3.5, pluggy-1.5.0
+rootdir: /Users/ziyitang/stanford-cs336/assignment1-basics
+configfile: pyproject.toml
+plugins: jaxtyping-0.3.1
+collected 1 item                                                                                            
+
+tests/test_data.py::test_get_batch PASSED
+
+============================================= 1 passed in 0.12s =============================================
+```
+### Serialization
+```
+cs336-basicsziyitang@MacBookAir assignment1-basics %  uv run pytest tests/test_serialization.py 
+============================================ test session starts ============================================
+platform darwin -- Python 3.13.5, pytest-8.3.5, pluggy-1.5.0
+rootdir: /Users/ziyitang/stanford-cs336/assignment1-basics
+configfile: pyproject.toml
+plugins: jaxtyping-0.3.1
+collected 1 item                                                                                            
+
+tests/test_serialization.py::test_checkpointing PASSED
+
+============================================= 1 passed in 0.59s =============================================
+```
