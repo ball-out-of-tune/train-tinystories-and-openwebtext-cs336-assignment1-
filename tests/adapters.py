@@ -6,22 +6,27 @@ from collections.abc import Iterable
 from jaxtyping import Float, Int
 from cs336_basics.tokenizer import BPETokenizerTrainer, BPETokenizer
 from cs336_basics.modules import (
-    Embedding,
-    Linear,
-    MultiHeadSelfAttention,
-    RMSNorm,
-    RotaryPositionalEmbedding,
+
     SwiGLUFFN,
-    TransformerBlock,
-    TransformerLM,
-    scaled_dot_product_attention,
+
+    
     silu,
-    softmax,
 )
+from cs336_basics.my_modules import Linear
+from cs336_basics.my_modules import Embedding
+from cs336_basics.my_modules import RotaryPositionalEmbedding
+from cs336_basics.my_modules import softmax
+from cs336_basics.modules import scaled_dot_product_attention
+from cs336_basics.modules import MultiHeadSelfAttention
+from cs336_basics.my_modules import RMSNorm
+from cs336_basics.my_modules import TransformerBlock
+from cs336_basics.my_modules import TransformerLM
+from cs336_basics.my_optim import AdamW
+
 from cs336_basics.data import get_batch
-from cs336_basics.loss import cross_entropy_loss
+from cs336_basics.my_loss import cross_entropy_loss
 from cs336_basics.optim import (
-    AdamW,
+    # AdamW,
     cosine_annealing_lr_scheduler,
     gradient_clipping,
 )
@@ -73,7 +78,7 @@ def run_embedding(
         Float[Tensor, "... d_model"]: Batch of embeddings returned by your Embedding layer.
     """
     embedding = Embedding(num_embeddings=vocab_size, embedding_dim=d_model)
-    embedding.load_state_dict({"emb": weights})
+    embedding.load_state_dict({"emd_matrix": weights})
     return embedding.forward(token_ids)
 
 

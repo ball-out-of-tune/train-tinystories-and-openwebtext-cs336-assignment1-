@@ -1,7 +1,7 @@
 import torch
 import logging
 import einops
-
+import math
 logger = logging.getLogger(__name__)
 
 
@@ -23,7 +23,8 @@ class Linear(torch.nn.Module):
         self.reset_parameters()
 
     def reset_parameters(self):
-        torch.nn.init.trunc_normal_(self.W, mean=0, std=2 / (self.out_features + self.in_features))
+        std = math.sqrt(2 / (self.out_features + self.in_features))
+        torch.nn.init.trunc_normal_(self.W, mean = 0, std = std, a = (-3 * std), b = (3 * std))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -34,33 +35,6 @@ class Linear(torch.nn.Module):
         """
         return x @ self.W.T
 
-
-class Embedding(torch.nn.Module):
-    def __init__(
-        self,
-        num_embeddings: int,  # vocab_size
-        embedding_dim: int,  # d_model
-        device: torch.device | None = None,
-        dtype: torch.dtype | None = None,
-    ):
-        super().__init__()
-        self.num_embeddings = num_embeddings
-        self.embedding_dim = embedding_dim
-        self.emb = torch.nn.Parameter(torch.empty(num_embeddings, embedding_dim))
-        self.reset_parameters()
-
-    def forward(self, token_ids: torch.Tensor) -> torch.Tensor:
-        """
-        Args:
-            token_ids: (batch_size, sequence_length)
-        Returns:
-            torch.Tensor: (batch_size, sequence_length, d_model)
-        """
-        # Recall that self.emb: (vocab_size, d_model)
-        return torch.stack([self.emb[token_ids[i], :] for i in range(token_ids.size(0))], dim=0)
-
-    def reset_parameters(self):
-        torch.nn.init.trunc_normal_(self.emb, mean=0, std=2 / (self.num_embeddings + self.embedding_dim))
 
 
 class RMSNorm(torch.nn.Module):
@@ -91,9 +65,11 @@ class RMSNorm(torch.nn.Module):
         x = x.to(torch.float32)
         # NOTE: Root mean square is computed along the feature dimension, meaning each token
         # is normalized w.r.t. its own features. The gain is applied on each feature for all tokens.
-        rms = torch.sqrt((1 / self.d_model) * torch.sum(x**2, dim=-1) + self.eps).unsqueeze(
-            -1
-        )  # (batch_size, sequence_length, 1)
+        # (batch, seq, 1)  每个 token 的 RMS
+        rms = torch.sqrt(
+            einops.reduce(x**2, "b s d -> b s 1", "mean") + self.eps
+        )
+        # (batch_size, sequence_length, 1)
         rms_norm = x / rms * self.gain
         return rms_norm.to(in_dtype)
 
@@ -128,9 +104,15 @@ class SwiGLUFFN(torch.nn.Module):
         Returns:
             torch.Tensor: (..., d_model)
         """
-        g = silu(in_features @ self.w1.T)  # gate: (..., d_ff)
-        x = in_features @ self.w3.T  # activation: (..., d_ff)
-        return (g * x) @ self.w2.T  # (..., d_model)
+       # gate branch
+        g = silu(einops.einsum(in_features, self.w1, "... d, f d -> ... f"))  # (..., d_ff)
+
+        # value branch
+        x = einops.einsum(in_features, self.w3, "... d, f d -> ... f")  # (..., d_ff)
+
+        # combine + project back
+        out = einops.einsum(g * x, self.w2, "... f, d f -> ... d")  # (..., d_model)
+        return out
 
     def reset_parameters(self):
         torch.nn.init.trunc_normal_(self.w1, mean=0, std=2 / (self.d_ff + self.d_model))
