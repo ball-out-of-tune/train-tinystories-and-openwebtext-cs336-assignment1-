@@ -138,6 +138,7 @@ def scaled_dot_product_attention(Q:torch.Tensor, K:torch.Tensor, V:torch.Tensor,
 
     if mask is not None:
         addictive_mask = torch.zeros_like(attention_scores)
+        mask = mask.to(addictive_mask.device)
         addictive_mask = addictive_mask.masked_fill(~mask.to(torch.bool), -torch.inf)
         attention_scores += addictive_mask
     

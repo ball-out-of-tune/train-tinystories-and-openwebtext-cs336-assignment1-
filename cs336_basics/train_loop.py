@@ -1,4 +1,6 @@
-from datetime import datetime, time
+import time
+import datetime
+from datetime import datetime
 import os
 import numpy as np
 import torch
@@ -9,10 +11,10 @@ from cs336_basics.my_modules import TransformerLM
 from cs336_basics.my_optim import AdamW
 from cs336_basics.pretrained_config import PretrainedConfig
 from cs336_basics.utils import save_checkpoint
-from data import get_batch
+from my_data import get_batch
 from loss import cross_entropy_loss
 from optim import cosine_annealing_lr_scheduler, gradient_clipping
-def train(dataset: npt.NDArray, model: torch.nn.Module, optimizer: torch.optim.Optimizer, config):
+def train(dataset: npt.NDArray, model: torch.nn.Module, optimizer: torch.optim.Optimizer, config: PretrainedConfig):
     inputs, targets = get_batch(dataset=dataset, batch_size=config.batch_size, context_length=config.context_length, device=config.device)
 
     model.train()
@@ -78,7 +80,7 @@ def train_model(config : PretrainedConfig):
                           num_heads=config.num_heads,
                           d_ff=config.d_ff,
                           rope_theta=config.rope_theta,
-                          device=config.device) 
+                          ).to(config.device)
 
     if config.use_compile:
         print("Compiling model for better performance...")
@@ -103,7 +105,7 @@ def train_model(config : PretrainedConfig):
 
     # 训练循环
     start_time = time.time()
-    for step in tqdm(range(1, config.total_steps+1)):
+    for step in tqdm.tqdm(range(1, config.total_steps+1)):
         # 更新學習率
         lr = cosine_annealing_lr_scheduler(
             step,
