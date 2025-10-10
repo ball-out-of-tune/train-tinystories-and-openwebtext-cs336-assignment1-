@@ -289,8 +289,9 @@ class BPETokenizer:
         logger.debug(f"All pretokens: {all_pretokens=}")
         # Merge bytes for each pretoken
         # merged_pretokens = self._tokenize_per_pretokens(all_pretokens)
-        with ProcessPoolExecutor() as executor:
-            merged_pretokens = list(executor.map(self._tokenize_per_pretokens, all_pretokens))
+        # with ProcessPoolExecutor() as executor:
+        #     merged_pretokens = list(executor.map(self._tokenize_per_pretokens, all_pretokens))
+        merged_pretokens = [self._tokenize_per_pretokens(p) for p in all_pretokens]
 
         logger.debug(f"Merged pretokens: {merged_pretokens}")
         return [byte for pretokens in merged_pretokens for byte in pretokens]
