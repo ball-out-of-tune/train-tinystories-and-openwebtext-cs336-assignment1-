@@ -117,7 +117,7 @@ def train_model(config : PretrainedConfig):
             param_group['lr'] = lr
 
         # train
-        loss = train(step, train_data, model, optimizer, config)
+        loss = train(train_data, model, optimizer, config)
 
         if step % config.log_freq == 0:
             grad_norm = torch.sqrt(sum(x* x for x in [p.grad.data.norm() for p in model.parameters() if p.requires_grad]))
