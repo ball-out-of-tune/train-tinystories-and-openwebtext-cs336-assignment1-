@@ -2,11 +2,13 @@ import pickle
 import numpy as np
 import torch
 import tqdm
+import os
 import itertools
 from cs336_basics.tokenizer_two import Tokenizer
 from memory_profiler import profile
 
 def process_data():
+    # === 1. 加载 tokenizer ===
     with open('save/tokenizer_vocab_train.pkl', 'rb') as f:
         vocab = pickle.load(f)
 
@@ -16,7 +18,7 @@ def process_data():
     special_tokens = "<|endoftext|>"
     tokenizer = Tokenizer(vocab, merges, special_tokens)
     print("初始化tokenizer完成")
-    # 加载train_dataset数据
+    # === 2. 文件与统计信息 ===
     train_path = "data/TinyStoriesV2-GPT4-train.txt"
     chunk_size = 5000  # 每次读取的行数
     all_encode_ids = []
@@ -25,40 +27,72 @@ def process_data():
     with open(train_path, "r", encoding="utf-8") as f:
         total_lines = sum(1 for _ in f)
     print(f"训练集总行数: {total_lines}")
-    max_lines = total_lines
+
+    # === 3. 先进行一次采样，估算 token 总数（避免二次遍历）===
+    # 用前 1 万行估算平均 tokens/行
+    sample_lines = 10000
     with open(train_path, "r", encoding="utf-8") as f:
-        processed_lines = 0
-        progress_bar = tqdm.tqdm(total=min(max_lines, sum(1 for _ in f)), desc="Processing train")
-        f.seek(0)  # 重置文件指针
-        
+        lines = list(itertools.islice(f, sample_lines))
+    sample_text = " ".join(line.strip() for line in lines)
+    sample_tokens = len(tokenizer.encode(sample_text))
+    avg_tokens_per_line = sample_tokens / sample_lines
+    estimated_total_tokens = int(total_lines * avg_tokens_per_line)
+    print(f"估算平均每行 {avg_tokens_per_line:.2f} tokens，预计总 tokens 数: {estimated_total_tokens:,}")   
+
+    # === 4. 使用 memmap 建立一个磁盘映射文件 ===
+    save_path = "save/encode_ids_train.dat"
+    mmap = np.memmap(save_path, dtype=np.uint16, mode='w+', shape=(estimated_total_tokens,))
+    write_pos = 0  # 当前写入位置
+
+    # === 5. 流式处理 ===
+    with open(train_path, "r", encoding="utf-8") as f:
+        progress_bar = tqdm.tqdm(total=total_lines, desc="Encoding train")
+
         while True:
-           # 计算本次读取的行数
-            lines_to_read = min(chunk_size, max_lines - processed_lines)
-            chunk_lines = list(itertools.islice(f, lines_to_read))
-            
-            if not chunk_lines:
+            lines_to_read = list(itertools.islice(f, chunk_size))
+            if not lines_to_read:
                 break
-                
-            chunk = [line.strip() for line in chunk_lines]
-            text_chunk = " ".join(chunk)
+
+            text_chunk = " ".join(line.strip() for line in lines_to_read)
             encode_ids = tokenizer.encode(text_chunk)
-            
-            if encode_ids is not None:
-                all_encode_ids.extend(encode_ids)
-            
-            processed_lines += len(chunk_lines)
-            progress_bar.update(len(chunk_lines))
-            print(f"已处理 {processed_lines} 行")
+
+            if encode_ids is None or len(encode_ids) == 0:
+                progress_bar.update(len(lines_to_read))
+                continue
+
+            # 写入 memmap 文件
+            end_pos = write_pos + len(encode_ids)
+            if end_pos > mmap.shape[0]:
+                # 需要扩容
+                new_size = mmap.shape[0] * 2
+                print(f"扩容 memmap 到 {new_size:,} tokens")
+                mmap.flush()
+                del mmap
+                os.rename(save_path, save_path + ".bak")
+                old = np.memmap(save_path + ".bak", dtype=np.uint16, mode='r', shape=(write_pos,))
+                mmap = np.memmap(save_path, dtype=np.uint16, mode='w+', shape=(new_size,))
+                mmap[:write_pos] = old[:write_pos]
+                del old
+                os.remove(save_path + ".bak")
+
+            mmap[write_pos:end_pos] = np.array(encode_ids, dtype=np.uint16)
+            write_pos = end_pos
+
+            progress_bar.update(len(lines_to_read))
 
         progress_bar.close()
 
-    print(all_encode_ids[:100])
-    
-    encode_ids_train = torch.tensor(all_encode_ids, dtype=torch.uint16)
-    print(f"处理完成，总共 {len(encode_ids_train)} 个token")
+    # === 6. 截断到真实大小并保存 ===
+    mmap.flush()
+    del mmap  # 关闭映射
 
-    np.save('save/encode_ids_valid.npy', encode_ids_train.numpy())
-    print("train文件已转化为ids, 被保存为npy形式")
+    # 重新打开并截断到实际大小
+    mmap_final = np.memmap(save_path, dtype=np.uint16, mode='r+', shape=(estimated_total_tokens,))
+    np.save("save/encode_ids_train.npy", mmap_final[:write_pos])
+    del mmap_final
+
+    print(f"✅ 处理完成，实际写入 {write_pos:,} 个 tokens。已保存为 encode_ids_train.npy")
+
 
     # # 加载validation_dataset数据
     # valid_path = "data/TinyStoriesV2-GPT4-valid.txt"

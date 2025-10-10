@@ -48,7 +48,71 @@ class Tokenizer:
                     i += 1
             parts = new_parts
         return parts
-
+    def _get_bpe_merges_optimized(self, piece: bytes) -> List[bytes]:
+        """优化版BPE合并"""
+        if len(piece) <= 1:
+            return [piece] if piece else []
+        
+        # 初始化为单字节列表
+        parts = [bytes([b]) for b in piece]
+        n = len(parts)
+        
+        # 使用优先队列来跟踪可合并的对
+        import heapq
+        # 初始化优先队列：(-priority, index) 使用负值因为heapq是最小堆
+        heap = []
+        for i in range(n - 1):
+            pair = (parts[i], parts[i+1])
+            if pair in self.merges_priority_map:
+                priority = self.merges_priority_map[pair]
+                heapq.heappush(heap, (priority, i))
+        
+        # 标记哪些位置已经被合并
+        merged = [False] * n
+        next_ptr = list(range(1, n + 1))  # 下一个未合并元素的位置
+        
+        while heap and n > 1:
+            # 获取最高优先级的合并对
+            priority, i = heapq.heappop(heap)
+            
+            # 检查这个合并对是否仍然有效（没有被前面的合并影响）
+            if merged[i] or merged[i+1]:
+                continue
+                
+            # 执行合并
+            merged_piece = parts[i] + parts[i+1]
+            parts[i] = merged_piece
+            merged[i+1] = True
+            n -= 1
+            
+            # 更新指针
+            next_ptr[i] = next_ptr[i+1] if i+1 < len(next_ptr) else len(parts)
+            
+            # 检查新的合并对（左边）
+            if i > 0 and not merged[i-1]:
+                left_pair = (parts[i-1], parts[i])
+                if left_pair in self.merges_priority_map:
+                    left_priority = self.merges_priority_map[left_pair]
+                    heapq.heappush(heap, (left_priority, i-1))
+            
+            # 检查新的合并对（右边）
+            next_i = next_ptr[i]
+            if next_i < len(parts) and not merged[next_i]:
+                right_pair = (parts[i], parts[next_i])
+                if right_pair in self.merges_priority_map:
+                    right_priority = self.merges_priority_map[right_pair]
+                    heapq.heappush(heap, (right_priority, i))
+        
+        # 收集未合并的结果
+        result = []
+        i = 0
+        while i < len(parts):
+            if not merged[i]:
+                result.append(parts[i])
+            i += 1
+        
+        return result
+    
     def encode(self, text: str) -> List[int]:
         if not text:
             return []
