@@ -1,0 +1,11 @@
+import pickle
+import pprint
+
+# 以二进制读取模式打开文件
+
+with open('save/TinyStoriesV2-merges.pkl', 'rb') as f: # 将‘你的文件.pkl’替换为实际路径
+    data_merges = pickle.load(f)
+
+# 现在，data 变量包含了 .pkl 文件中的全部内容
+pp = pprint.PrettyPrinter(indent=4)
+pp.pprint(data_merges)
