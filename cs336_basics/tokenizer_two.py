@@ -139,36 +139,16 @@ class Tokenizer:
             else:
                 # 如果chunk是普通文本，使用BPE算法处理
                 # 首先，使用PAT正则表达式将chunk分割为"单词"
-                for word in chunk.split():
-                    # 移除标点或单独保留标点
-                    pieces = []
-                    buf = b''
-                    for c in word:
-                        if c in string.punctuation:
-                            if buf:
-                                pieces.append(buf)
-                                buf = b''
-                            pieces.append(c.encode('utf-8'))
-                        else:
-                            buf += c.encode('utf-8')
-                    if buf:
-                        pieces.append(buf)
-
-                    for piece in pieces:
-                        merged_pieces = self._get_bpe_merges(piece)
-                        for small_piece in merged_pieces:
-                            final_ids.append(self.bytes_to_id[small_piece])
-
-                # for word in regex.findall(PAT, chunk):
-                #     if not word:
-                #         continue
+                for word in regex.findall(PAT, chunk):
+                    if not word:
+                        continue
                     
-                #     # 获取word的合并字节片段
-                #     merged_pieces = self._get_bpe_merges(word.encode('utf-8'))
+                    # 获取word的合并字节片段
+                    merged_pieces = self._get_bpe_merges(word.encode('utf-8'))
                     
-                #     # 将每个片段转换为token id
-                #     for piece in merged_pieces:
-                #         final_ids.append(self.bytes_to_id[piece])
+                    # 将每个片段转换为token id
+                    for piece in merged_pieces:
+                        final_ids.append(self.bytes_to_id[piece])
         return final_ids
 
     def encode_iterable(self, iterable: Iterable[str]) -> Iterator[int]:

@@ -37,11 +37,11 @@ def process_data():
     sample_tokens = len(tokenizer.encode(sample_text))
     avg_tokens_per_line = sample_tokens / sample_lines
     estimated_total_tokens = int(total_lines * avg_tokens_per_line)
-    print(f"估算平均每行 {avg_tokens_per_line:.2f} tokens，预计总 tokens 数: {estimated_total_tokens:,}")   
+    print(f"估算平均每行 {avg_tokens_per_line:.2f} tokens, 预计总 tokens 数: {estimated_total_tokens:,}")   
 
     # === 4. 使用 memmap 建立一个磁盘映射文件 ===
     save_path = "save/encode_ids_train.dat"
-    mmap = np.memmap(save_path, dtype=np.uint16, mode='w+', shape=(estimated_total_tokens,))
+    mmap = np.memmap(save_path, dtype=np.uint16, mode='w+', shape=((int)(estimated_total_tokens * 1.1),))
     write_pos = 0  # 当前写入位置
 
     # === 5. 流式处理 ===
@@ -88,7 +88,7 @@ def process_data():
 
     # 重新打开并截断到实际大小
     mmap_final = np.memmap(save_path, dtype=np.uint16, mode='r+', shape=(estimated_total_tokens,))
-    np.save("save/encode_ids_train.npy", mmap_final[:write_pos])
+    np.save("save/TinyStoriesV2-GPT4-train.npy", mmap_final[:write_pos])
     del mmap_final
 
     print(f"✅ 处理完成，实际写入 {write_pos:,} 个 tokens。已保存为 encode_ids_train.npy")
