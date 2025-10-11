@@ -9,10 +9,10 @@ from memory_profiler import profile
 
 def process_data():
     # === 1. 加载 tokenizer ===
-    with open('save/tokenizer_vocab_train.pkl', 'rb') as f:
+    with open('save/TinyStoriesV2-vocab.pkl', 'rb') as f:
         vocab = pickle.load(f)
 
-    with open('save/tokenizer_merges_train.pkl', 'rb') as f:
+    with open('save/TinyStoriesV2-merges.pkl', 'rb') as f:
         merges = pickle.load(f)
 
     special_tokens = "<|endoftext|>"
