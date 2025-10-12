@@ -11,7 +11,8 @@ def get_batch(
 ):
     total_len = dataset.size
     # NOTE: Have offset 1 to accomodate the target
-    sample_start_idx = np.random.randint(total_len - context_length, size=(batch_size,))
+    # minus 1 ensures array won't be out of bounds
+    sample_start_idx = np.random.randint(total_len - context_length - 1, size=(batch_size,))
     inputs = []
     targets = []
     for idx in sample_start_idx:
