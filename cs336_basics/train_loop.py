@@ -2,6 +2,7 @@ import time
 import datetime
 from datetime import datetime
 import os
+import gc
 import numpy as np
 import torch
 import numpy.typing as npt
@@ -45,6 +46,10 @@ def evaluate(dataset: npt.NDArray, model: torch.nn.Module, config: PretrainedCon
             logits = model(inputs)
             loss = cross_entropy_loss(logits, targets)
             losses.append(loss.item())
+
+    # ✅ 清理缓存防止显存碎片化
+    gc.collect()
+    torch.cuda.empty_cache()
 
     return sum(losses) / len(losses)
 
@@ -150,6 +155,9 @@ def train_model(config : PretrainedConfig):
                 os.path.join(config.checkpoint_dir, f"checkpoint_{step}.pt"),
             )
             print(f"Checkpoint saved to {config.checkpoint_dir}/checkpoint_{step}.pt")
+
+            gc.collect()
+            torch.cuda.empty_cache()
 
     eval_loss = evaluate(valid_data, model, config)
     wandb.log({
