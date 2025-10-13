@@ -18,7 +18,7 @@ model = TransformerLM(d_model=config.d_model, num_heads=config.num_heads, d_ff=c
                       rope_theta=config.rope_theta, num_layers=config.num_layers, vocab_size=config.vocab_size).to(config.device)
 
 # 加载 checkpoint 并处理参数名
-checkpoint = torch.load("checkpoint/checkpoint_20000.pt", map_location=config.device)
+checkpoint = torch.load("checkpoint/checkpoint_5000.pt", map_location=config.device)
 model_state_dict = checkpoint['model_state_dict']
 
 # 去掉 _orig_mod. 前缀
@@ -59,6 +59,6 @@ input_text = "Once upon a time, there was a pretty girl named Lily.One day, Lily
 # input_ids = torch.tensor(input_ids, dtype=torch.long).to(config.device)
 
 # 推理
-output_text = generate_text(model, tokenizer, input_text, max_length=200)
+output_text = generate_text(model=model, tokenizer=tokenizer, prompt=input_text, max_length=200,temperature=1)
 
 print(output_text)

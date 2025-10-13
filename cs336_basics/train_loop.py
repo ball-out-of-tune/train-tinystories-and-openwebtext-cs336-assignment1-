@@ -35,7 +35,7 @@ def train(dataset: npt.NDArray, model: torch.nn.Module, optimizer: torch.optim.O
 
     return loss.item()
 
-def evaluate(dataset: npt.NDArray, model: torch.nn.Module, config):
+def evaluate(dataset: npt.NDArray, model: torch.nn.Module, config: PretrainedConfig):
     # 切换到eval模式
     model.eval()
     losses = []
@@ -80,6 +80,7 @@ def train_model(config : PretrainedConfig):
                           num_heads=config.num_heads,
                           d_ff=config.d_ff,
                           rope_theta=config.rope_theta,
+                          device=config.device
                           ).to(config.device)
 
     if config.use_compile:

@@ -16,8 +16,8 @@ def cross_entropy_loss(logits: torch.Tensor, targets: torch.Tensor):
     since we only care about the feature dim for loss computation
 
     Args:
-        logits: (batch_size, vocal_size)
-        targets: (batch_size,)
+        logits: (batch_size, seq_len, vocal_size)
+        targets: (batch_size, seq_len)
     """
     # NOTE: Subtract the largest value per sample, keep dim to broadcast the max value
     logits = logits - torch.max(logits, dim=-1, keepdim=True).values

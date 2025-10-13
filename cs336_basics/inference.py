@@ -187,7 +187,8 @@ def generate_text(model, tokenizer: Tokenizer, prompt: str, max_length: int=50, 
                 input_ids = input_ids[:, -512:]
     
     # 解码生成结果
-    new_tokens = generated[0][prompt_length:]  # 去掉prompt对应的token
+    new_tokens = generated[0]
+    # new_tokens = generated[0][prompt_length:]  # 去掉prompt对应的token
     # 将CUDA tensor转换为CPU上的普通Python列表
     new_tokens_list = new_tokens.cpu().tolist()
     generated_text = tokenizer.decode(new_tokens_list)

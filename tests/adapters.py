@@ -23,7 +23,7 @@ from cs336_basics.my_modules import TransformerBlock
 from cs336_basics.my_modules import TransformerLM
 from cs336_basics.my_optim import AdamW
 
-from cs336_basics.data import get_batch
+from cs336_basics.my_data import get_batch
 from cs336_basics.my_loss import cross_entropy_loss
 from cs336_basics.optim import (
     # AdamW,

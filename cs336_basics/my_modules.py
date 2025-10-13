@@ -4,7 +4,7 @@ import math
 import einops
 
 class Linear(nn.Module):
-    def __init__(self, in_features, out_features, device=None, dtype=None):
+    def __init__(self, in_features: int, out_features: int, device="cuda" if torch.cuda.is_available() else "cpu", dtype=None):
         super().__init__()
         self.in_features = in_features
         self.out_features = out_features
@@ -14,34 +14,38 @@ class Linear(nn.Module):
         self.reset_parameters()
 
     def forward(self, x : torch.Tensor) -> torch.Tensor:
+        x = x.to(device=self.device)
         return x @ self.W.T
 
     def reset_parameters(self):
-        std = math.sqrt(self.in_features + self.out_features)
+        std = math.sqrt(2 / (self.in_features + self.out_features))
         nn.init.trunc_normal_(self.W, mean = 0, std = std, a = (-3 * std), b = (3 * std))
 
 class Embedding(nn.Module):
-    def __init__(self, num_embeddings, embedding_dim, device=None, dtype=None):
+    def __init__(self, num_embeddings, embedding_dim, device="cuda" if torch.cuda.is_available() else "cpu", dtype=None):
         super().__init__()
         self.num_embeddings = num_embeddings
         self.embedding_dim = embedding_dim
         self.device = device
         self.dtype = dtype
-        self.emb = nn.Parameter(torch.empty(num_embeddings, embedding_dim))
+        self.emb = nn.Parameter(torch.empty(num_embeddings, embedding_dim, device=device, dtype=dtype))
         torch.nn.init.trunc_normal_(self.emb, mean = 0, std = 1, a = -3, b = 3)
 
     def forward(self, token_ids: torch.Tensor) -> torch.Tensor:
+        token_ids = token_ids.to(device=self.device)
         return self.emb[token_ids]
 
 
 class RMSNorm(nn.Module):
-    def __init__(self, d_model: int, eps: float = 1e-5, device=None, dtype=None):
+    def __init__(self, d_model: int, eps: float = 1e-5, device="cuda" if torch.cuda.is_available() else "cpu", dtype=None):
         super().__init__()
+        self.device = device
         self.d_model = d_model
         self.eps = eps
-        self.gain = torch.nn.Parameter(torch.ones(d_model))
+        self.gain = torch.nn.Parameter(torch.ones(d_model, device=device, dtype=dtype))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = x.to(device=self.device)
         in_dtype = x.dtype
         x = x.to(torch.float32)
         # Your code here performing RMSNorm
@@ -51,7 +55,7 @@ class RMSNorm(nn.Module):
         # Return the result in the original dtype
         return result.to(in_dtype)
 
-def silu(in_features: torch.Tensor):
+def silu(in_features: torch.Tensor, device="cuda" if torch.cuda.is_available() else "cpu"):
     """Apply SiLU activation function to an input tensor
 
     Args:
@@ -60,17 +64,18 @@ def silu(in_features: torch.Tensor):
     Returns:
         torch.Tensor: (..., d_model)
     """
+    in_features = in_features.to(device=device)
     return in_features * torch.sigmoid(in_features)
 
 
 class SwiGLUFFN(torch.nn.Module):
-    def __init__(self, d_model: int, d_ff: int):
+    def __init__(self, d_model: int, d_ff: int, device="cuda" if torch.cuda.is_available() else "cpu", dtype=None):
         super().__init__()
         self.d_model = d_model
         self.d_ff = d_ff
-        self.w1 = torch.nn.Parameter(torch.empty(d_ff, d_model))
-        self.w2 = torch.nn.Parameter(torch.empty(d_model, d_ff))
-        self.w3 = torch.nn.Parameter(torch.empty(d_ff, d_model))
+        self.w1 = torch.nn.Parameter(torch.empty(d_ff, d_model, device=device, dtype=dtype))
+        self.w2 = torch.nn.Parameter(torch.empty(d_model, d_ff, device=device, dtype=dtype))
+        self.w3 = torch.nn.Parameter(torch.empty(d_ff, d_model, device=device, dtype=dtype))
 
         self.reset_parameters()
 
@@ -97,12 +102,13 @@ class SwiGLUFFN(torch.nn.Module):
         torch.nn.init.trunc_normal_(self.w3, mean=0, std=2 / (self.d_ff + self.d_model))
 
 class RotaryPositionalEmbedding(nn.Module):
-    def __init__(self, theta: float, d_k: int, max_seq_len: int, device=None):
+    def __init__(self, theta: float, d_k: int, max_seq_len: int, device="cuda" if torch.cuda.is_available() else "cpu"):
         super().__init__()
         assert (d_k % 2 == 0)
         self.theta = theta
-        m = torch.arange(start=0, end=max_seq_len)
-        i = torch.arange(start=0, end=d_k // 2)
+        self.device = device
+        m = torch.arange(start=0, end=max_seq_len, device=device)
+        i = torch.arange(start=0, end=d_k // 2, device=device)
 
         i = 1 / (theta ** (2 * i / d_k))
         angles = m[:, None] * i[None, :]
@@ -111,6 +117,8 @@ class RotaryPositionalEmbedding(nn.Module):
         self.register_buffer("sin", torch.sin(angles), persistent=False)
 
     def forward(self, x: torch.Tensor, token_positions: torch.Tensor) -> torch.Tensor:
+        x = x.to(device=self.device)
+        token_positions = token_positions.to(device=self.device)
         x_even = x[..., 0::2]
         x_odd = x[..., 1::2]
 
@@ -122,16 +130,19 @@ class RotaryPositionalEmbedding(nn.Module):
         return x_out
     
 
-def softmax(x: torch.Tensor, i: int):
+def softmax(x: torch.Tensor, i: int, device = "cuda" if torch.cuda.is_available() else "cpu"):
+    x = x.to(device=device)
     x = x - torch.max(input=x, dim=i, keepdim=True).values
     exp_x = torch.exp(x)
     return exp_x / torch.sum(input=exp_x, dim=i, keepdim=True)
 
-def scaled_dot_product_attention(Q:torch.Tensor, K:torch.Tensor, V:torch.Tensor, mask=None):
+def scaled_dot_product_attention(Q:torch.Tensor, K:torch.Tensor, V:torch.Tensor, mask=None, device="cuda" if torch.cuda.is_available() else "cpu"):
     """
     mask 等于 True 的时候表示不需要掩码, 等于False的时候表示需要掩码
     """
-
+    Q = Q.to(device=device)
+    K = K.to(device=device)
+    V = V.to(device=device)
     d_k = Q.size(-1)
 
     attention_scores = torch.matmul(Q, K.transpose(-2, -1)) / math.sqrt(d_k)
@@ -201,19 +212,20 @@ def scaled_dot_product_attention(Q:torch.Tensor, K:torch.Tensor, V:torch.Tensor,
 
 
 class CasualMultiHeadSelfAttention(nn.Module):
-    def __init__(self, d_model: int, num_heads: int, max_seq_len:int = None, theta: float = None, device = None, dtype = None):
+    def __init__(self, d_model: int, num_heads: int, max_seq_len:int = None, theta: float = None, device = "cuda" if torch.cuda.is_available() else "cpu", dtype = None):
         super().__init__()
         assert d_model % num_heads == 0
+        self.device = device
         self.d_model = d_model
         self.num_heads = num_heads
         self.d_k = d_model // num_heads
-        self.w_q = torch.nn.Parameter(torch.empty(d_model, d_model))
-        self.w_k = torch.nn.Parameter(torch.empty(d_model, d_model))
-        self.w_v = torch.nn.Parameter(torch.empty(d_model, d_model))
+        self.w_q = torch.nn.Parameter(torch.empty(d_model, d_model, device=device, dtype=dtype))
+        self.w_k = torch.nn.Parameter(torch.empty(d_model, d_model, device=device, dtype=dtype))
+        self.w_v = torch.nn.Parameter(torch.empty(d_model, d_model, device=device, dtype=dtype))
         torch.nn.init.trunc_normal_(self.w_q, mean=0, std=2 / (self.d_model + self.d_model))
         torch.nn.init.trunc_normal_(self.w_k, mean=0, std=2 / (self.d_model + self.d_model))
         torch.nn.init.trunc_normal_(self.w_v, mean=0, std=2 / (self.d_model + self.d_model))
-        self.w_o = torch.nn.Parameter(torch.empty(d_model, d_model))
+        self.w_o = torch.nn.Parameter(torch.empty(d_model, d_model, device=device, dtype=dtype))
         torch.nn.init.trunc_normal_(self.w_o, mean=0, std=2 / (self.d_model + self.d_model))
         if max_seq_len is not None and theta is not None:
             self.rope = RotaryPositionalEmbedding(theta=theta, d_k = self.d_k, max_seq_len=max_seq_len)
@@ -221,6 +233,9 @@ class CasualMultiHeadSelfAttention(nn.Module):
             self.rope = None
 
     def forward(self, x: torch.Tensor, token_positions:torch.Tensor = None):
+        x = x.to(device=self.device)
+        if token_positions is not None:
+            token_positions = token_positions.to(device=self.device)
         batch_size, seq_len, d_model = x.shape
 
         Q = x @ self.w_q.T  
@@ -233,7 +248,7 @@ class CasualMultiHeadSelfAttention(nn.Module):
 
         if self.rope is not None:
             if token_positions is None:
-                token_positions = torch.arange(seq_len)
+                token_positions = torch.arange(seq_len).to(device=self.device)
             Q = self.rope(Q, token_positions)
             K = self.rope(K, token_positions)
 
@@ -248,25 +263,28 @@ class CasualMultiHeadSelfAttention(nn.Module):
     
     
 class TransformerBlock(nn.Module):
-    def __init__(self, d_model: int, num_heads: int, d_ff: int, max_seq_len: int, theta: float = None):
+    def __init__(self, d_model: int, num_heads: int, d_ff: int, max_seq_len: int, theta: float = None, device="cuda" if torch.cuda.is_available() else "cpu", dtype=None):
         super().__init__()
         self.d_model = d_model
         self.num_heads = num_heads
         self.d_ff = d_ff
-        self.attn_pre_ln = RMSNorm(d_model=d_model)
-        self.ffn_pre_ln = RMSNorm(d_model=d_model)
+        self.device = device
+        self.attn_pre_ln = RMSNorm(d_model=d_model, device=device)
+        self.ffn_pre_ln = RMSNorm(d_model=d_model, device=device)
         self.attn = CasualMultiHeadSelfAttention(d_model=d_model, num_heads=num_heads, max_seq_len=max_seq_len, theta=theta)
         self.ffn = SwiGLUFFN(d_model=d_model, d_ff=d_ff)
 
     def forward(self, x:torch.Tensor):
+        x = x.to(device=self.device)
         x = x + self.attn(self.attn_pre_ln(x))
         y = x + self.ffn(self.ffn_pre_ln(x))
         return y
 
 class TransformerLM(nn.Module):
     def __init__(self, vocab_size: int, context_length: int, num_layers: int, d_model: int, num_heads: int, d_ff: int, 
-                 rope_theta: float):
+                 rope_theta: float, device = "cuda" if torch.cuda.is_available() else "cpu"):
         super().__init__()
+        self.device = device
         self.token_embeddings = Embedding(num_embeddings=vocab_size, embedding_dim=d_model)
         self.layers = nn.Sequential(*[TransformerBlock(d_model=d_model, num_heads=num_heads, d_ff=d_ff, max_seq_len=context_length, 
                                                        theta=rope_theta) for _ in range(num_layers)])
@@ -274,6 +292,7 @@ class TransformerLM(nn.Module):
         self.lm_head = Linear(in_features=d_model, out_features=vocab_size)
 
     def forward(self, x: torch.Tensor):
+        x = x.to(self.device)
         embeddings = self.token_embeddings(x)
         attn_output = self.layers(embeddings)
         output = self.lm_head(self.ln_final(attn_output))
