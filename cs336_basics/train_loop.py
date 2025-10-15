@@ -74,9 +74,9 @@ def train_model(config : PretrainedConfig):
         torch.set_float32_matmul_precision("medium")
 
     # 加载数据
-    train_data = np.memmap(config.train_path, dtype=np.uint16, mode='r')
-    valid_data = np.memmap(config.valid_path, dtype=np.uint16, mode='r')
-    # 
+    train_data = np.array(np.memmap(config.train_path, dtype=np.uint16, mode='r'))
+    valid_data = np.array(np.memmap(config.valid_path, dtype=np.uint16, mode='r'))
+    
     # 模型
     model = TransformerLM(vocab_size=config.vocab_size, 
                           context_length=config.context_length,
@@ -296,6 +296,9 @@ def train_model_from_checkpoint(config: PretrainedConfig, checkpoint_step: int):
                 os.path.join(config.checkpoint_dir, f"checkpoint_{step}.pt")
             )
             print(f"Checkpoint saved to {config.checkpoint_dir}/checkpoint_{step}.pt")
+
+            gc.collect()
+            torch.cuda.empty_cache()
 
     # final eval
     eval_loss = evaluate(valid_data, model, config)
