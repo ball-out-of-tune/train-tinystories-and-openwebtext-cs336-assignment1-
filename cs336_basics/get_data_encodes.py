@@ -19,7 +19,7 @@ def process_data():
     tokenizer = Tokenizer(vocab, merges, special_tokens)
     print("初始化tokenizer完成")
     # === 2. 文件与统计信息 ===
-    train_path = "data/TinyStoriesV2-GPT4-train.txt"
+    train_path = "data/TinyStoriesV2-GPT4-valid.txt"
     chunk_size = 5000  # 每次读取的行数
     all_encode_ids = []
 
@@ -40,7 +40,7 @@ def process_data():
     print(f"估算平均每行 {avg_tokens_per_line:.2f} tokens, 预计总 tokens 数: {estimated_total_tokens:,}")   
 
     # === 4. 使用 memmap 建立一个磁盘映射文件 ===
-    save_path = "save/encode_ids_train.dat"
+    save_path = "save/encode_ids_valid.dat"
     mmap = np.memmap(save_path, dtype=np.uint16, mode='w+', shape=((int)(estimated_total_tokens * 1.1),))
     write_pos = 0  # 当前写入位置
 
@@ -88,10 +88,10 @@ def process_data():
 
     # 重新打开并截断到实际大小
     mmap_final = np.memmap(save_path, dtype=np.uint16, mode='r+', shape=(estimated_total_tokens,))
-    np.save("save/TinyStoriesV2-GPT4-train.npy", mmap_final[:write_pos])
+    np.save("save/TinyStoriesV2-GPT4-valid.npy", mmap_final[:write_pos])
     del mmap_final
 
-    print(f"✅ 处理完成，实际写入 {write_pos:,} 个 tokens。已保存为 encode_ids_train.npy")
+    print(f"✅ 处理完成，实际写入 {write_pos:,} 个 tokens。已保存为 TinyStoriesV2-GPT4-valid.npy")
 
 
     # # 加载validation_dataset数据

@@ -1,6 +1,6 @@
 import torch
 import pickle
-from cs336_basics.inference import generate_text
+from cs336_basics.inference import generate_text, generate_text_with_debug
 from cs336_basics.my_modules import TransformerLM
 from cs336_basics.tokenizer_two import Tokenizer
 from pretrained_config import PretrainedConfig
@@ -18,7 +18,7 @@ model = TransformerLM(d_model=config.d_model, num_heads=config.num_heads, d_ff=c
                       rope_theta=config.rope_theta, num_layers=config.num_layers, vocab_size=config.vocab_size).to(config.device)
 
 # 加载 checkpoint 并处理参数名
-checkpoint = torch.load("checkpoint/checkpoint_20000.pt", map_location=config.device)
+checkpoint = torch.load("checkpoint/checkpoint_10000.pt", map_location=config.device)
 model_state_dict = checkpoint['model_state_dict']
 
 # 去掉 _orig_mod. 前缀
@@ -52,13 +52,17 @@ with open("save/TinyStoriesV2-merges.pkl", "rb") as f:
 special_tokens = ["<|endoftext|>"]  
 
 tokenizer = Tokenizer(vocab, merges, special_tokens)
-input_text = "Once upon a time, there was a pretty girl named Lily.One day, Lily's mom asked her to help cook dinner."
-# input_text = "It was the best of times, it was the worst of times, it was the age of wisdom, it was the age of foolishness, it was the epoch of belief, it was the epoch of incredulity, it was the season of Light, it was the season of darkness, it was the spring of hope, it was the winter of despair."
+# input_text = "Once upon a time, there was a pretty girl named Lily.One day, Lily's mom asked her to help cook dinner."
+# input_text = "It was the best of times, it was the worst of times, it was the age of wisdom, it was the age of foolishness, it was the epoch of belief, it was the epoch of incredulity, it was the season of Light, "
+input_text = "It was the best of times, it was the worst of times, it was the age of wisdom, it was the age of foolishness, it was the epoch of belief, it was the epoch of incredulity, it was the season of Light, it was the season of darkness, it was the spring of hope, it was the winter of despair."
 # input_text = "baby shark"
 # input_ids = tokenizer.encode(input_text)
 # input_ids = torch.tensor(input_ids, dtype=torch.long).to(config.device)
 
+print("begin the inference")
 # 推理
-output_text = generate_text(model=model, tokenizer=tokenizer, prompt=input_text, max_length=200,temperature=1)
+output_text = generate_text(model=model, tokenizer=tokenizer, prompt=input_text, max_length=256,temperature=1)
+print("end the inference")
+
 
 print(output_text)

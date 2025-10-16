@@ -132,8 +132,8 @@ def top_p_sampling_batch(logits, p=0.9, temperature=1.0):
 # print("累积概率:", cumulative_probs)
 # print("保留的token索引:", sorted_indices[cumulative_probs <= 0.9])
 
-def generate_text(model, tokenizer: Tokenizer, prompt: str, max_length: int=50, p: float=0.9, 
-                  temperature: float=1.0, device="cuda" if torch.cuda.is_available() else "cpu", special_tokens = "<endoftext>"):
+def generate_text(model, tokenizer: Tokenizer, prompt: str, max_length: int=256, p: float=0.9, 
+                  temperature: float=1.0, device="cuda" if torch.cuda.is_available() else "cpu", special_tokens = "<|endoftext|>"):
     """
     文本生成函数
     
@@ -152,6 +152,8 @@ def generate_text(model, tokenizer: Tokenizer, prompt: str, max_length: int=50, 
     
     # 编码输入文本
     input_ids = torch.tensor(tokenizer.encode(prompt)).to(device)
+    print("max input_id: ")
+    print(max(input_ids))
     prompt_length = len(input_ids)
     if input_ids.dim() == 1:  # 如果是一维的 [seq_len]
         input_ids = input_ids.unsqueeze(0)  # 变成 [1, seq_len]
@@ -182,9 +184,10 @@ def generate_text(model, tokenizer: Tokenizer, prompt: str, max_length: int=50, 
             if next_token_id in special_token_ids:
                 break
                 
-            # 限制输入长度（滑动窗口，避免过长）
-            if input_ids.shape[-1] > 512:
-                input_ids = input_ids[:, -512:]
+            # 限制输入长度（最多和context_length一样！ 因为rope的矩阵大小为context_length * context_length,
+            # 假如不限制的话就会访问rope矩阵数组越界）
+            if input_ids.shape[-1] > 256:
+                input_ids = input_ids[:, -256:]
     
     # 解码生成结果
     new_tokens = generated[0]
@@ -351,6 +354,97 @@ def test_generation():
     prompt = "测试输入"
     result = generate_text(model, tokenizer, prompt, max_length=10, p=0.9, temperature=1.0)
     print(f"测试生成结果: {result}")
+
+def generate_text_with_debug(model, tokenizer: Tokenizer, prompt: str, max_length: int=256, p: float=0.9, 
+                  temperature: float=1.0, device="cuda" if torch.cuda.is_available() else "cpu", 
+                  special_tokens = "<|endoftext|>"):
+    """
+    文本生成函数 - 调试版本，每生成一个词就输出
+    """
+    model.eval()
+    
+    # 编码输入文本
+    input_ids = torch.tensor(tokenizer.encode(prompt)).to(device)
+    print(f"输入token数: {len(input_ids)}")
+    print(f"输入token IDs: {input_ids.tolist()}")
+    
+    # 检查序列长度是否超过模型限制
+    if len(input_ids) > 256:
+        print(f"警告: 输入序列长度 {len(input_ids)} 超过模型上下文长度 {256}")
+        input_ids = input_ids[:256]
+        print(f"截断后token IDs: {input_ids.tolist()}")
+    
+    if input_ids.dim() == 1:
+        input_ids = input_ids.unsqueeze(0)
+    
+    generated = input_ids.clone()
+    prompt_length = len(input_ids[0])
+    
+    print(f"开始生成，初始输入: '{prompt}'")
+    print("=" * 50)
+    
+    with torch.no_grad():
+        for step in range(max_length):
+            # 检查当前序列长度
+            current_length = input_ids.shape[1]
+            if current_length > 256:
+                # 滑动窗口：保留最近的context_length个token
+                input_ids = input_ids[:, -256:]
+                print(f"步骤 {step}: 序列截断到 {256}")
+            
+            print(f"\n--- 步骤 {step+1} ---")
+            print(f"当前输入序列长度: {input_ids.shape[1]}")
+            
+            try:
+                # 获取模型输出
+                print("执行模型前向传播...")
+                outputs = model(input_ids)
+                logits = outputs[:, -1, :]
+                print(f"Logits形状: {logits.shape}")
+                print(f"Logits范围: {logits.min():.3f} ~ {logits.max():.3f}")
+                
+                # 使用top-p采样选择下一个token
+                print("执行top-p采样...")
+                next_token_id = top_p_sampling(logits[0], p=p, temperature=temperature)
+                print(f"采样得到的token ID: {next_token_id}")
+                
+                # 解码当前token
+                current_token_text = tokenizer.decode([next_token_id])
+                print(f"生成的token文本: '{current_token_text}'")
+                
+                # 将新token添加到序列中
+                next_token = torch.tensor([[next_token_id]]).to(device)
+                input_ids = torch.cat([input_ids, next_token], dim=-1)
+                generated = torch.cat([generated, next_token], dim=-1)
+                
+                # 显示当前完整生成结果
+                current_full_text = tokenizer.decode(generated[0].cpu().tolist())
+                print(f"当前完整文本: '{current_full_text}'")
+                
+                # 如果遇到结束符，提前停止
+                if special_tokens:
+                    special_token_id = tokenizer.encode(special_tokens)[0]
+                    if next_token_id == special_token_id:
+                        print("🎯 遇到结束符，停止生成")
+                        break
+                        
+            except Exception as e:
+                print(f"❌ 步骤 {step+1} 出错: {e}")
+                print(f"出错时的输入IDs: {input_ids.cpu().tolist()}")
+                print(f"出错时的生成IDs: {generated.cpu().tolist()}")
+                import traceback
+                traceback.print_exc()
+                break
+    
+    # 解码最终生成结果
+    final_tokens = generated[0].cpu().tolist()
+    generated_text = tokenizer.decode(final_tokens)
+    
+    print("=" * 50)
+    print("🎉 生成完成!")
+    print(f"最终结果: '{generated_text}'")
+    
+    return generated_text
 
 if __name__ == "__main__":
     test_generation()

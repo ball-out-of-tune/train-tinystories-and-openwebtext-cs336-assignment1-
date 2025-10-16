@@ -15,6 +15,8 @@ from cs336_basics.utils import save_checkpoint
 from my_data import get_batch
 from loss import cross_entropy_loss
 from optim import cosine_annealing_lr_scheduler, gradient_clipping
+from torch.cuda.amp import autocast, GradScaler
+
 def train(dataset: npt.NDArray, model: torch.nn.Module, optimizer: torch.optim.Optimizer, config: PretrainedConfig):
     inputs, targets = get_batch(dataset=dataset, batch_size=config.batch_size, context_length=config.context_length, device=config.device)
 
