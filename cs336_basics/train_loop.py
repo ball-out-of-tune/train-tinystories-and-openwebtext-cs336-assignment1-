@@ -116,7 +116,7 @@ def train_model(config : PretrainedConfig):
         lr = cosine_annealing_lr_scheduler(
             step,
             config.learning_rate,
-            config.learning_rate*0.05,
+            config.learning_rate*0.1,
             config.warmup_steps,
             config.total_steps
         )

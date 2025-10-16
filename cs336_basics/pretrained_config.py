@@ -30,7 +30,7 @@ class PretrainedConfig():
     epsilon: float = 1e-8
     weight_decay: float = 0.01 # 
     gradient_clipping: float = 1.0
-    warmup_steps: int = 4000   # 10% of total_steps
+    warmup_steps: int = 800   # 2.5% of total_steps
     total_steps: int = 40000
 
     # logging and checkpoint
