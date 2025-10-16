@@ -8,10 +8,10 @@ import torch
 import numpy.typing as npt
 import tqdm
 import wandb
-from cs336_basics.my_modules import TransformerLM
-from cs336_basics.my_optim import AdamW
-from cs336_basics.pretrained_config import PretrainedConfig
-from cs336_basics.utils import save_checkpoint
+from my_modules import TransformerLM
+from my_optim import AdamW
+from pretrained_config import PretrainedConfig
+from utils import save_checkpoint
 from my_data import get_batch
 from loss import cross_entropy_loss
 from optim import cosine_annealing_lr_scheduler, gradient_clipping
