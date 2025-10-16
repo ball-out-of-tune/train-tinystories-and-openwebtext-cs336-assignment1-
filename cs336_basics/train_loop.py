@@ -17,24 +17,26 @@ from loss import cross_entropy_loss
 from optim import cosine_annealing_lr_scheduler, gradient_clipping
 from torch.cuda.amp import autocast, GradScaler
 
-def train(dataset: npt.NDArray, model: torch.nn.Module, optimizer: torch.optim.Optimizer, config: PretrainedConfig):
+def train(dataset: npt.NDArray, model: torch.nn.Module, optimizer: torch.optim.Optimizer, config: PretrainedConfig, scaler: GradScaler):
     inputs, targets = get_batch(dataset=dataset, batch_size=config.batch_size, context_length=config.context_length, device=config.device)
 
     model.train()
 
     # 计算loss
-    logits = model(inputs)
-    loss = cross_entropy_loss(logits, targets)
+    with autocast(dtype=torch.bfloat16):
+        logits = model(inputs)
+        loss = cross_entropy_loss(logits, targets)
 
     # 梯度清零
     optimizer.zero_grad()
     # 梯度下降，自动求导
-    loss.backward()
+    scaler.scale(loss).backward()
 
     gradient_clipping(model.parameters(), config.gradient_clipping)
 
     # 更新模型
-    optimizer.step()
+    scaler.step(optimizer=optimizer)
+    scaler.update()
 
     return loss.item()
 
@@ -45,8 +47,9 @@ def evaluate(dataset: npt.NDArray, model: torch.nn.Module, config: PretrainedCon
     with torch.no_grad():
         for n in range(config.eval_batch):
             inputs, targets = get_batch(dataset, config.batch_size, config.context_length, config.device)
-            logits = model(inputs)
-            loss = cross_entropy_loss(logits, targets)
+            with autocast(dtype=torch.bfloat16):
+                logits = model(inputs)
+                loss = cross_entropy_loss(logits, targets)
             losses.append(loss.item())
 
     # ✅ 清理缓存防止显存碎片化
@@ -57,6 +60,7 @@ def evaluate(dataset: npt.NDArray, model: torch.nn.Module, config: PretrainedCon
 
 
 def train_model(config : PretrainedConfig):
+    scaler = GradScaler()
     # setup logger
     run = wandb.init(
         project=config.project_name,
@@ -127,7 +131,7 @@ def train_model(config : PretrainedConfig):
             param_group['lr'] = lr
 
         # train
-        loss = train(train_data, model, optimizer, config)
+        loss = train(train_data, model, optimizer, config, scaler=scaler)
 
         if step % config.log_freq == 0:
             grad_norm = torch.sqrt(sum(x* x for x in [p.grad.data.norm() for p in model.parameters() if p.requires_grad]))
