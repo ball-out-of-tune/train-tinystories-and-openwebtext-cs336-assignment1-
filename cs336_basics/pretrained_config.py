@@ -14,7 +14,7 @@ class PretrainedConfig():
 
     # model parameter (7.2 TinyStories)
     base_batch_size: int = 32
-    batch_size: int = 1 # 
+    batch_size: int = 64 # 
     vocab_size: int = 10000
     context_length: int = 256
     d_model: int = 512
@@ -35,7 +35,7 @@ class PretrainedConfig():
     base_total_steps: int = 40000
     total_steps: int = base_total_steps * (int)(base_batch_size / batch_size)
     base_warmup_steps: int = 800   # 2.5% of total_steps
-    warmup_steps: int = base_total_steps * (base_warmup_steps / base_total_steps)
+    warmup_steps: int = (int)(base_total_steps * (base_warmup_steps / base_total_steps))
     
      # === logging and checkpoint ===
     base_log_freq: int = 100
