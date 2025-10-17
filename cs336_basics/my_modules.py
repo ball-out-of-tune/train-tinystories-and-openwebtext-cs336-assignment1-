@@ -269,15 +269,24 @@ class TransformerBlock(nn.Module):
         self.num_heads = num_heads
         self.d_ff = d_ff
         self.device = device
-        self.attn_pre_ln = RMSNorm(d_model=d_model, device=device)
-        self.ffn_pre_ln = RMSNorm(d_model=d_model, device=device)
+        # self.attn_pre_ln = RMSNorm(d_model=d_model, device=device)
+        # self.ffn_pre_ln = RMSNorm(d_model=d_model, device=device)
+        self.attn_post_ln = RMSNorm(d_model=d_model, device=device)
+        self.ffn_post_ln = RMSNorm(d_model=d_model, device=device)
         self.attn = CasualMultiHeadSelfAttention(d_model=d_model, num_heads=num_heads, max_seq_len=max_seq_len, theta=theta)
         self.ffn = SwiGLUFFN(d_model=d_model, d_ff=d_ff)
 
     def forward(self, x:torch.Tensor):
         x = x.to(device=self.device)
-        x = x + self.attn(self.attn_pre_ln(x))
-        y = x + self.ffn(self.ffn_pre_ln(x))
+        # x = x + self.attn(self.attn_pre_ln(x))
+        # y = x + self.ffn(self.ffn_pre_ln(x))
+        # Post-LayerNorm: 先做注意力，然后归一化，最后残差连接
+        attn_output = self.attn(x)
+        x = x + self.attn_post_ln(attn_output)
+        
+        # Post-LayerNorm: 先做FFN，然后归一化，最后残差连接
+        ffn_output = self.ffn(x)
+        y = x + self.ffn_post_ln(ffn_output)
         return y
 
 class TransformerLM(nn.Module):
@@ -295,7 +304,8 @@ class TransformerLM(nn.Module):
         x = x.to(self.device)
         embeddings = self.token_embeddings(x)
         attn_output = self.layers(embeddings)
-        output = self.lm_head(self.ln_final(attn_output))
+        output = self.lm_head(attn_output)
+        output = self.ln_final(output)
         # NOTE: We don't compute softmax here and will do it
         # in the loss function
         return output
