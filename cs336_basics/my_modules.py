@@ -297,15 +297,17 @@ class TransformerLM(nn.Module):
         self.token_embeddings = Embedding(num_embeddings=vocab_size, embedding_dim=d_model)
         self.layers = nn.Sequential(*[TransformerBlock(d_model=d_model, num_heads=num_heads, d_ff=d_ff, max_seq_len=context_length, 
                                                        theta=rope_theta) for _ in range(num_layers)])
-        self.ln_final = RMSNorm(d_model=d_model)
+        # self.ln_final = RMSNorm(d_model=d_model)
+        # self.lm_head = Linear(in_features=d_model, out_features=vocab_size)
         self.lm_head = Linear(in_features=d_model, out_features=vocab_size)
+        self.ln_final = RMSNorm(d_model=d_model, device=device)  # 可留可去
 
     def forward(self, x: torch.Tensor):
         x = x.to(self.device)
         embeddings = self.token_embeddings(x)
         attn_output = self.layers(embeddings)
-        output = self.lm_head(attn_output)
-        output = self.ln_final(output)
+        output = self.ln_final(attn_output)
+        output = self.lm_head(output)
         # NOTE: We don't compute softmax here and will do it
         # in the loss function
         return output
