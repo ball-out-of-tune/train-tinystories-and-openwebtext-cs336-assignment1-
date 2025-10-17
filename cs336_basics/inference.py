@@ -4,7 +4,7 @@ import torch
 import torch.nn.functional as F
 import numpy as np
 
-from cs336_basics.tokenizer_two import Tokenizer
+from tokenizer_two import Tokenizer
 
 def top_p_sampling(logits, p=0.9, temperature=1.0):
     """
