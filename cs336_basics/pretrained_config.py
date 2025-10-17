@@ -14,7 +14,7 @@ class PretrainedConfig():
 
     # model parameter (7.2 TinyStories)
     base_batch_size: int = 32
-    batch_size: int = 64 # 
+    batch_size: int = 32 # 
     vocab_size: int = 10000
     context_length: int = 256
     d_model: int = 512
