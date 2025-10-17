@@ -101,6 +101,26 @@ class SwiGLUFFN(torch.nn.Module):
         torch.nn.init.trunc_normal_(self.w2, mean=0, std=2 / (self.d_model + self.d_ff))
         torch.nn.init.trunc_normal_(self.w3, mean=0, std=2 / (self.d_ff + self.d_model))
 
+class SiLUFFN(torch.nn.Module):
+    def __init__(self, d_model: int, d_ff: int, device="cuda" if torch.cuda.is_available() else "cpu", dtype=None):
+        super().__init__()
+        self.d_model = d_model
+        self.d_ff = d_ff
+        self.w1 = torch.nn.Parameter(torch.empty(d_ff, d_model, device=device, dtype=dtype))
+        self.w2 = torch.nn.Parameter(torch.empty(d_model, d_ff, device=device, dtype=dtype))
+        self.reset_parameters()
+
+    def forward(self, in_features: torch.Tensor):
+        x = einops.einsum(in_features, self.w1, "... d, f d -> ... f")  # (B, L, d_ff)
+        x = silu(x)  # 使用 SiLU 激活
+        out = einops.einsum(x, self.w2, "... f, d f -> ... d")  # (B, L, d_model)
+        return out
+
+    def reset_parameters(self):
+        torch.nn.init.trunc_normal_(self.w1, mean=0, std=2 / (self.d_ff + self.d_model))
+        torch.nn.init.trunc_normal_(self.w2, mean=0, std=2 / (self.d_model + self.d_ff))
+
+
 class RotaryPositionalEmbedding(nn.Module):
     def __init__(self, theta: float, d_k: int, max_seq_len: int, device="cuda" if torch.cuda.is_available() else "cpu"):
         super().__init__()
@@ -272,7 +292,7 @@ class TransformerBlock(nn.Module):
         self.attn_pre_ln = RMSNorm(d_model=d_model, device=device)
         self.ffn_pre_ln = RMSNorm(d_model=d_model, device=device)
         self.attn = CasualMultiHeadSelfAttention(d_model=d_model, num_heads=num_heads, max_seq_len=max_seq_len, theta=theta)
-        self.ffn = SwiGLUFFN(d_model=d_model, d_ff=d_ff)
+        self.ffn = SiLUFFN(d_model=d_model, d_ff=d_ff)
 
     def forward(self, x:torch.Tensor):
         x = x.to(device=self.device)
