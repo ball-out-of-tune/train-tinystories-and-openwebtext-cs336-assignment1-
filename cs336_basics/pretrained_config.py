@@ -33,7 +33,7 @@ class PretrainedConfig():
     weight_decay: float = 0.01 # 
     gradient_clipping: float = 1.0
     base_total_steps: int = 40000
-    total_steps: int = base_total_steps * (int)(base_batch_size / batch_size)
+    total_steps: int = (int)(base_total_steps * (base_batch_size / batch_size))
     base_warmup_steps: int = 800   # 2.5% of total_steps
     warmup_steps: int = (int)(base_total_steps * (base_warmup_steps / base_total_steps))
     
