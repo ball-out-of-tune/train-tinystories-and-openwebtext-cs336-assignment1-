@@ -25,7 +25,7 @@ def get_batch(
     # 一次性向量化采样起点（比 for 循环快）
     starts = np.random.randint(0, total_len - context_length - 1, size=batch_size)
     # 利用广播索引一次取出全部切片
-    idx = starts[:, None] + np.arange(context_length + 1)[None, :]  # (batch, seq+1)
+    idx = starts[:, None] + np.arange(context_length)[None, :]  # (batch, seq+1)
     batch = dataset[idx]  # 一次性读取所有 (batch, seq+1) 的数据
     inputs = torch.from_numpy(batch[:, :-1]).long()
     targets = torch.from_numpy(batch[:, 1:]).long()
